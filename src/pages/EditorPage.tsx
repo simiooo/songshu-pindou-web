@@ -1,22 +1,25 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { ConfigProvider, App as AntdApp, Button, Space, Modal, Dropdown, message } from 'antd';
+import { useEffect, useState, useCallback } from 'react';
+import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space } from 'antd';
 import type { MenuProps } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
-import { Toolbar } from '@/components/editor/Toolbar';
 import { ColorPalette } from '@/components/editor/ColorPalette';
-import { HistoryControls } from '@/components/editor/HistoryControls';
 import { CanvasSizeSelector } from '@/components/editor/CanvasSizeSelector';
 import { ImageUploader } from '@/components/upload/ImageUploader';
 import { PixelationPreview } from '@/components/upload/PixelationPreview';
 import { LLMProviderManager } from '@/components/llm/LLMProviderManager';
+import { AppHeader } from '@/components/layout/AppHeader';
+import { Sidebar } from '@/components/layout/Sidebar';
 import { useEditorStore } from '@/store/editorStore';
 import { useUploadStore } from '@/store/uploadStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { exportToPNG, exportToJSON, downloadFile, downloadImage } from '@/utils/exportUtils';
 import theme from '@/theme';
 import type { CanvasData, CanvasSize } from '@/types/editor';
+import { UploadOutlined } from '@ant-design/icons';
 
 export function EditorPage() {
+  const { t } = useTranslation();
   const {
     showGrid,
     gridColor,
@@ -27,41 +30,37 @@ export function EditorPage() {
     canvasData,
     canvasSize,
     projectName,
-    isDirty,
-    lastSavedAt,
     loadCanvas,
   } = useEditorStore();
 
   const { status, importedImage, reset: resetUpload } = useUploadStore();
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
-
-  const timeUpdateRef = useRef<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showColorPalette, setShowColorPalette] = useState(true);
 
   useAutoSave();
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+      setShowColorPalette(window.innerWidth >= 1024);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handlePixelationConfirm = useCallback((pixelData: CanvasData, size: CanvasSize) => {
     loadCanvas(pixelData, size);
     resetUpload();
-    message.success('图片已应用到画布');
-  }, [loadCanvas, resetUpload]);
+    message.success(t('upload.imageLoaded'));
+  }, [loadCanvas, resetUpload, t]);
 
   const handlePixelationCancel = useCallback(() => {
     resetUpload();
   }, [resetUpload]);
 
   const showPixelationModal = status === 'ready' && importedImage !== null;
-
-  useEffect(() => {
-    timeUpdateRef.current = window.setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 30000);
-    return () => {
-      if (timeUpdateRef.current) {
-        clearInterval(timeUpdateRef.current);
-      }
-    };
-  }, []);
 
   const handleExportPNG = useCallback((pixelSize: number) => {
     try {
@@ -72,65 +71,50 @@ export function EditorPage() {
         backgroundColor: '#FFFFFF',
       });
       downloadImage(dataUrl, `${projectName}_${canvasSize}x${canvasSize}.png`);
-      message.success('PNG 导出成功');
+      message.success(t('export.exportSuccess'));
     } catch {
-      message.error('PNG 导出失败');
+      message.error(t('export.exportFailed'));
     }
-  }, [canvasData, canvasSize, projectName]);
+  }, [canvasData, canvasSize, projectName, t]);
 
   const handleExportJSON = useCallback(() => {
     try {
       const json = exportToJSON(canvasData, canvasSize, projectName);
       downloadFile(json, `${projectName}.json`, 'application/json');
-      message.success('JSON 导出成功');
+      message.success(t('export.exportSuccess'));
     } catch {
-      message.error('JSON 导出失败');
+      message.error(t('export.exportFailed'));
     }
-  }, [canvasData, canvasSize, projectName]);
+  }, [canvasData, canvasSize, projectName, t]);
 
   const exportMenuItems: MenuProps['items'] = [
     {
       key: 'png-1x',
-      label: 'PNG (1x)',
+      label: t('export.png1x'),
       onClick: () => handleExportPNG(1),
     },
     {
       key: 'png-2x',
-      label: 'PNG (2x)',
+      label: t('export.png2x'),
       onClick: () => handleExportPNG(2),
     },
     {
       key: 'png-4x',
-      label: 'PNG (4x)',
+      label: t('export.png4x'),
       onClick: () => handleExportPNG(4),
     },
     {
       key: 'png-8x',
-      label: 'PNG (8x)',
+      label: t('export.png8x'),
       onClick: () => handleExportPNG(8),
     },
     { type: 'divider' },
     {
       key: 'json',
-      label: 'JSON (项目文件)',
+      label: t('export.json'),
       onClick: handleExportJSON,
     },
   ];
-
-  const getSaveStatusText = useCallback(() => {
-    if (isDirty) {
-      return '未保存';
-    }
-    if (lastSavedAt) {
-      const diff = currentTime - lastSavedAt;
-      if (diff < 60000) {
-        return '已保存';
-      }
-      const minutes = Math.floor(diff / 60000);
-      return `已保存 (${minutes}分钟前)`;
-    }
-    return '未保存';
-  }, [isDirty, lastSavedAt, currentTime]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -182,86 +166,138 @@ export function EditorPage() {
         <div
           style={{
             display: 'flex',
+            flexDirection: 'column',
             height: '100vh',
-            background: '#f5f5f5',
             overflow: 'hidden',
+            background: 'var(--color-bg-secondary)',
           }}
         >
-          <div
-            style={{
-              width: 280,
-              borderRight: '1px solid #e8e8e8',
-              background: '#fff',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            <div style={{ padding: 16, borderBottom: '1px solid #e8e8e8' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>拼豆编辑器</h1>
-                  <p style={{ margin: '8px 0 0', fontSize: 12, color: '#999' }}>
-                    Perler Beads Editor
-                  </p>
-                </div>
-                <Button
-                  type="text"
-                  size="small"
-                  onClick={() => {
-                    setShowSettingsModal(true);
-                  }}
-                  style={{ fontSize: 16 }}
-                >
-                  ⚙️
-                </Button>
-              </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: '#999' }}>
-                {getSaveStatusText()}
-              </div>
-            </div>
-
-            <div style={{ padding: 16, borderBottom: '1px solid #e8e8e8' }}>
-              <CanvasSizeSelector />
-            </div>
-
-            <div style={{ padding: 16, borderBottom: '1px solid #e8e8e8' }}>
-              <Toolbar />
-            </div>
-
-            <div style={{ padding: 16, borderBottom: '1px solid #e8e8e8' }}>
-              <ImageUploader />
-            </div>
-
-            <div style={{ padding: 16, borderBottom: '1px solid #e8e8e8' }}>
-              <HistoryControls />
-            </div>
-
-            <div style={{ padding: 16, borderBottom: '1px solid #e8e8e8' }}>
-              <Space direction="vertical" style={{ width: '100%' }} size={8}>
-                <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
-                  <Button style={{ width: '100%' }}>导出作品</Button>
-                </Dropdown>
-              </Space>
-            </div>
-
-            <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-              <ColorPalette />
-            </div>
-          </div>
+          <AppHeader />
 
           <div
             style={{
               flex: 1,
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'auto',
-              padding: 32,
+              overflow: 'hidden',
             }}
           >
-            <EditorCanvas showGrid={showGrid} gridColor={gridColor} />
+            <Sidebar onSettingsClick={() => setShowSettingsModal(true)} />
+
+            <main
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'auto',
+                    padding: isMobile ? 'var(--space-md)' : 'var(--space-xl)',
+                  }}
+                >
+                  <EditorCanvas showGrid={showGrid} gridColor={gridColor} />
+                </div>
+
+                {showColorPalette && !isMobile && (
+                  <aside
+                    style={{
+                      width: 300,
+                      background: 'var(--color-bg)',
+                      borderLeft: '1px solid var(--color-border-light)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: 'var(--space-md)',
+                        borderBottom: '1px solid var(--color-border-light)',
+                      }}
+                    >
+                      <CanvasSizeSelector />
+                    </div>
+
+                    <div
+                      style={{
+                        padding: 'var(--space-md)',
+                        borderBottom: '1px solid var(--color-border-light)',
+                      }}
+                    >
+                      <ImageUploader />
+                    </div>
+
+                    <div
+                      style={{
+                        flex: 1,
+                        overflow: 'auto',
+                        padding: 'var(--space-md)',
+                      }}
+                    >
+                      <ColorPalette />
+                    </div>
+
+                    <div
+                      style={{
+                        padding: 'var(--space-md)',
+                        borderTop: '1px solid var(--color-border-light)',
+                      }}
+                    >
+                      <Space direction="vertical" style={{ width: '100%' }} size="small">
+                        <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
+                          <Button style={{ width: '100%' }} icon={<UploadOutlined />}>
+                            {t('export.exportProject')}
+                          </Button>
+                        </Dropdown>
+                      </Space>
+                    </div>
+                  </aside>
+                )}
+              </div>
+            </main>
           </div>
+
+          {isMobile && (
+            <div
+              style={{
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                background: 'var(--color-bg)',
+                borderTop: '1px solid var(--color-border-light)',
+                padding: 'var(--space-sm)',
+                display: 'flex',
+                gap: 'var(--space-sm)',
+                zIndex: 100,
+              }}
+            >
+              <Button
+                onClick={() => setShowColorPalette(!showColorPalette)}
+                style={{ flex: 1 }}
+              >
+                {showColorPalette ? t('editor.tools') : t('color.palette')}
+              </Button>
+              <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
+                <Button icon={<UploadOutlined />} style={{ flex: 1 }}>
+                  {t('common.export')}
+                </Button>
+              </Dropdown>
+            </div>
+          )}
         </div>
 
         <PixelationPreview
@@ -274,11 +310,12 @@ export function EditorPage() {
         />
 
         <Modal
-          title="设置"
+          title={t('common.settings')}
           open={showSettingsModal}
           onCancel={() => setShowSettingsModal(false)}
           footer={null}
           width={600}
+          styles={{ body: { padding: 'var(--space-md)' } }}
         >
           <LLMProviderManager />
         </Modal>

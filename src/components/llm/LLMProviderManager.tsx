@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Modal, Form, Input, Select, Switch, Button, Table, Popconfirm, message } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { useLLMProviderStore } from '@/store/llmProviderStore';
 import type { LLMProvider } from '@/types/editor';
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 
 const PROVIDER_OPTIONS = [
   { value: 'openai', label: 'OpenAI' },
@@ -51,6 +53,7 @@ const MODEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
 };
 
 export function LLMProviderManager() {
+  const { t } = useTranslation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<LLMProvider | null>(null);
   const [form] = Form.useForm();
@@ -79,7 +82,7 @@ export function LLMProviderManager() {
 
   const handleDelete = (id: string) => {
     deleteProvider(id);
-    message.success('删除成功');
+    message.success(t('common.delete') + ' ' + t('llm.provider'));
   };
 
   const handleSubmit = async () => {
@@ -93,10 +96,10 @@ export function LLMProviderManager() {
 
       if (editingProvider) {
         updateProvider(editingProvider.id, providerData);
-        message.success('更新成功');
+        message.success(t('common.edit') + ' ' + t('llm.provider'));
       } else {
         addProvider(providerData);
-        message.success('添加成功');
+        message.success(t('common.add') + ' ' + t('llm.provider'));
       }
 
       setIsModalOpen(false);
@@ -113,17 +116,17 @@ export function LLMProviderManager() {
         updateProvider(p.id, { isDefault: false });
       }
     });
-    message.success('已设为默认');
+    message.success(t('llm.setAsDefault'));
   };
 
   const columns = [
     {
-      title: '名称',
+      title: t('llm.name'),
       dataIndex: 'name',
       key: 'name',
     },
     {
-      title: 'Provider',
+      title: t('llm.provider'),
       dataIndex: 'provider',
       key: 'provider',
       render: (provider: string) => {
@@ -132,46 +135,62 @@ export function LLMProviderManager() {
       },
     },
     {
-      title: '模型',
+      title: t('llm.model'),
       dataIndex: 'model',
       key: 'model',
     },
     {
-      title: '状态',
+      title: t('llm.enabled'),
       dataIndex: 'enabled',
       key: 'enabled',
-      render: (enabled: boolean) => (enabled ? '启用' : '禁用'),
+      render: (enabled: boolean) => (
+        <span
+          style={{
+            color: enabled ? 'var(--color-success)' : 'var(--color-text-secondary)',
+            fontSize: 13,
+          }}
+        >
+          {enabled ? t('llm.enabled') : t('llm.disabled')}
+        </span>
+      ),
     },
     {
-      title: '默认',
+      title: t('llm.default'),
       dataIndex: 'isDefault',
       key: 'isDefault',
       render: (isDefault: boolean, record: LLMProvider) =>
         isDefault ? (
-          <span style={{ color: '#52c41a' }}>默认</span>
+          <span style={{ color: 'var(--color-success)', fontSize: 13 }}>
+            {t('llm.default')}
+          </span>
         ) : (
-          <Button type="link" size="small" onClick={() => handleSetDefault(record.id)}>
-            设为默认
+          <Button
+            type="link"
+            size="small"
+            onClick={() => handleSetDefault(record.id)}
+            style={{ padding: 0, fontSize: 13 }}
+          >
+            {t('llm.setAsDefault')}
           </Button>
         ),
     },
     {
-      title: '操作',
+      title: t('common.edit'),
       key: 'action',
       render: (_: unknown, record: LLMProvider) => (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Button type="link" size="small" onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
+        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+          <Button
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          />
           <Popconfirm
-            title="确定删除此 Provider？"
+            title={t('llm.deleteConfirm')}
             onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
           >
-            <Button type="link" size="small" danger>
-              删除
-            </Button>
+            <Button type="text" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </div>
       ),
@@ -180,9 +199,13 @@ export function LLMProviderManager() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleAdd}>
-          新增 Provider
+      <div style={{ marginBottom: 'var(--space-md)' }}>
+        <Button
+          type="primary"
+          onClick={handleAdd}
+          icon={<PlusOutlined />}
+        >
+          {t('llm.addProvider')}
         </Button>
       </div>
 
@@ -191,33 +214,37 @@ export function LLMProviderManager() {
         dataSource={providers}
         rowKey="id"
         pagination={false}
-        locale={{ emptyText: '暂无 Provider，请点击"新增 Provider"添加' }}
+        locale={{ emptyText: t('llm.noProviders') }}
+        style={{
+          borderRadius: 'var(--radius-md)',
+          overflow: 'hidden',
+        }}
       />
 
       <Modal
-        title={editingProvider ? '编辑 Provider' : '新增 Provider'}
+        title={editingProvider ? t('llm.editProvider') : t('llm.addProvider')}
         open={isModalOpen}
         onOk={handleSubmit}
         onCancel={() => setIsModalOpen(false)}
-        okText="确定"
-        cancelText="取消"
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
       >
         <Form form={form} layout="vertical">
           <Form.Item
             name="name"
-            label="名称"
-            rules={[{ required: true, message: '请输入名称' }]}
+            label={t('llm.name')}
+            rules={[{ required: true, message: `Please enter ${t('llm.name').toLowerCase()}` }]}
           >
-            <Input placeholder="如: 我的 OpenAI" />
+            <Input placeholder="e.g., My OpenAI" />
           </Form.Item>
 
           <Form.Item
             name="provider"
-            label="Provider"
-            rules={[{ required: true, message: '请选择 Provider' }]}
+            label={t('llm.provider')}
+            rules={[{ required: true, message: `Please select a ${t('llm.provider').toLowerCase()}` }]}
           >
             <Select
-              placeholder="选择 Provider"
+              placeholder={`Select ${t('llm.provider').toLowerCase()}`}
               options={PROVIDER_OPTIONS}
               onChange={(value) => {
                 setSelectedProvider(value);
@@ -228,28 +255,28 @@ export function LLMProviderManager() {
 
           <Form.Item
             name="model"
-            label="模型"
-            rules={[{ required: true, message: '请选择模型' }]}
+            label={t('llm.model')}
+            rules={[{ required: true, message: `Please select a ${t('llm.model').toLowerCase()}` }]}
           >
             <Select
-              placeholder="选择模型"
+              placeholder={`Select ${t('llm.model').toLowerCase()}`}
               options={MODEL_OPTIONS[selectedProvider] || []}
             />
           </Form.Item>
 
-          <Form.Item name="apiKey" label="API Key">
-            <Input.Password placeholder="输入 API Key" />
+          <Form.Item name="apiKey" label={t('llm.apiKey')}>
+            <Input.Password placeholder={`Enter ${t('llm.apiKey').toLowerCase()}`} />
           </Form.Item>
 
-          <Form.Item name="baseUrl" label="自定义端点 (可选)">
-            <Input placeholder="如: https://api.openai.com/v1" />
+          <Form.Item name="baseUrl" label={t('llm.customEndpoint')}>
+            <Input placeholder="e.g., https://api.openai.com/v1" />
           </Form.Item>
 
-          <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue={true}>
+          <Form.Item name="enabled" label={t('llm.enabled')} valuePropName="checked" initialValue={true}>
             <Switch />
           </Form.Item>
 
-          <Form.Item name="isDefault" label="设为默认" valuePropName="checked" initialValue={false}>
+          <Form.Item name="isDefault" label={t('llm.setAsDefault')} valuePropName="checked" initialValue={false}>
             <Switch />
           </Form.Item>
         </Form>

@@ -228,14 +228,17 @@ interface LLMProviderStore {
 ```
 src/
 ├── components/
+│   ├── layout/
+│   │   ├── AppHeader.tsx         # 顶部导航栏（含 Logo 和语言切换）
+│   │   └── Sidebar.tsx           # 侧边栏（工具、视图、历史记录）
 │   ├── editor/
 │   │   ├── EditorCanvas.tsx       # 画布主组件
 │   │   ├── PixelGrid.tsx          # 像素网格
 │   │   ├── GridOverlay.tsx        # 网格辅助线
 │   │   ├── SelectionOverlay.tsx  # 选中区域
-│   │   ├── Toolbar.tsx            # 工具栏
+│   │   ├── Toolbar.tsx            # 工具栏（已废弃，请使用 Sidebar）
 │   │   ├── ColorPalette.tsx       # 色号面板
-│   │   ├── HistoryControls.tsx    # 撤销/重做
+│   │   ├── HistoryControls.tsx    # 撤销/重做（已废弃，请使用 Sidebar）
 │   │   ├── CanvasSizeSelector.tsx  # 画布尺寸选择
 │   │   └── SelectionPopup.tsx     # 选中区域操作弹窗
 │   │
@@ -262,6 +265,15 @@ src/
 │   ├── usePixelation.ts
 │   └── useLLMProcess.ts
 │
+├── i18n/
+│   ├── index.ts                  # i18n 配置
+│   └── locales/
+│       ├── zh-CN.ts              # 中文翻译
+│       └── en-US.ts              # 英文翻译
+│
+├── theme/
+│   └── index.ts                  # Ant Design 主题配置
+│
 ├── utils/
 │   ├── pixelation.ts
 │   ├── colorMatching.ts
@@ -279,14 +291,69 @@ src/
 
 ---
 
-## 5. 预设色号组数据
+## 5. UI 设计系统
 
-### 5.1 Perler Beads (5mm)
+### 5.1 设计理念
+- **去线留白**: 极简风格，减少视觉噪音，突出内容
+- **柔和色调**: 使用温暖的米色、浅驼色作为主色调
+- **松鼠品牌元素**: Logo 融入松鼠造型，呼应品牌
+- **响应式设计**: 支持桌面、平板和移动端
+
+### 5.2 色彩系统
+```
+--color-primary: #C4956A      # 温暖驼色（主色调）
+--color-primary-hover: #B8875D # 主色悬停
+--color-primary-bg: rgba(196, 149, 106, 0.08) # 主色背景
+--color-success: #7DB88F       # 柔和绿色
+--color-warning: #E5B567       # 温暖黄色
+--color-error: #D47070         # 柔和红色
+--color-text: #4A4A4A          # 主文字
+--color-text-secondary: #8A8A8A # 次要文字
+--color-bg: #FDFCFA           # 主背景（温暖米白）
+--color-bg-secondary: #F7F5F2  # 次要背景
+--color-border: #EBEBEB       # 边框
+--color-border-light: #F0F0F0  # 浅边框
+```
+
+### 5.3 圆角系统
+```
+--radius-sm: 8px    # 小圆角（按钮、输入框）
+--radius-md: 12px   # 中圆角（卡片、面板）
+--radius-lg: 16px   # 大圆角（模态框）
+```
+
+### 5.4 间距系统
+```
+--space-xs: 4px
+--space-sm: 8px
+--space-md: 16px
+--space-lg: 24px
+--space-xl: 32px
+```
+
+### 5.5 响应式断点
+```
+移动端: < 768px
+平板端: 768px - 1024px
+桌面端: >= 1024px
+超大屏: >= 1440px
+```
+
+### 5.6 i18n 支持
+项目内置中文（zh-CN）和英文（en-US）支持，通过 `react-i18next` 实现。
+- 语言切换位于顶部导航栏
+- 所有 UI 文本均通过翻译 key 引用
+
+---
+
+## 6. 预设色号组数据
+
+### 6.1 Perler Beads (5mm)
 - **总数**: 103 色
 - **格式**: 5位数字编码 (如 `19001` = White)
 - **分类**: 基础实色、珠光色、荧光色、条纹色
 
-### 5.2 Artkal S Beads (5mm)
+### 6.2 Artkal S Beads (5mm)
 - **总数**: 199 色
 - **格式**: `S` + 数字 (如 `S01` = White)
 - **分类**:
@@ -300,16 +367,16 @@ src/
   | SP1-SP8 | 珠光色系 | 珍珠光泽 |
   | ST1-ST6 | 透明色系 | 半透明效果 |
 
-### 5.3 Artkal M Beads (2.6mm Mini)
+### 6.3 Artkal M Beads (2.6mm Mini)
 - **总数**: 220 色
 - **格式**: `M` + 字母 + 数字 (如 `MA1`, `MB1`)
 - **分类**: 按色系分组 (黄/橙、绿、蓝、紫、粉/玫红、红、棕/米、灰/白)
 
 ---
 
-## 6. 功能详细设计
+## 7. 功能详细设计
 
-### 6.1 图片上传与像素化
+### 7.1 图片上传与像素化
 
 #### 上传方式
 | 方式 | 实现 |
@@ -327,7 +394,7 @@ src/
 - 可选启用弗洛伊德-斯坦伯格抖动
 - 抖动可使渐变更平滑，减少色块感
 
-### 6.2 画布编辑
+### 7.2 画布编辑
 
 #### 工具
 | 工具 | 快捷键 | 功能 |
@@ -345,7 +412,7 @@ src/
 - 支持深色/浅色切换
 - 网格线宽度 1px
 
-### 6.3 LLM Provider 管理
+### 7.3 LLM Provider 管理
 
 #### 功能列表
 | 功能 | 说明 |
@@ -371,7 +438,7 @@ src/
 用户框选区域 → 提取区域图片 → 用户输入指令 → 调用 LLM → 返回处理结果 → 更新画布
 ```
 
-### 6.4 保存功能
+### 7.4 保存功能
 
 #### 自动保存
 - 每 30 秒自动保存到 IndexedDB (Dexie)
@@ -385,7 +452,7 @@ src/
 
 ---
 
-## 7. 数据库设计 (Dexie)
+## 8. 数据库设计 (Dexie)
 
 ```typescript
 // projects 表
@@ -429,7 +496,7 @@ interface CustomColorGroupRecord {
 
 ---
 
-## 8. 技术依赖
+## 9. 技术依赖
 
 ```json
 {
@@ -442,14 +509,16 @@ interface CustomColorGroupRecord {
     "dexie": "latest",
     "uuid": "latest",
     "ai": "latest",
-    "@ai-sdk/provider-utils": "latest"
+    "@ai-sdk/provider-utils": "latest",
+    "i18next": "latest",
+    "react-i18next": "latest"
   }
 }
 ```
 
 ---
 
-## 9. 开发优先级
+## 10. 开发优先级
 
 ### Phase 1: 基础编辑功能
 1. 项目脚手架 + 路由
@@ -480,7 +549,7 @@ interface CustomColorGroupRecord {
 
 ---
 
-## 10. 色号数据文件
+## 11. 色号数据文件
 
 完整的色号数据将存储在 `src/constants/colorGroups.ts` 中，包含：
 - `PERLER_COLORS`: Perler 103 色

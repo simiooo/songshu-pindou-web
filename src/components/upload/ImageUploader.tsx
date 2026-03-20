@@ -1,19 +1,18 @@
 import { Upload, Button, message } from 'antd';
 import type { RcFile } from 'antd/es/upload';
+import { useTranslation } from 'react-i18next';
 import { useUploadStore } from '@/store/uploadStore';
 import { useEffect, useCallback } from 'react';
+import { UploadOutlined } from '@ant-design/icons';
 
-interface ImageUploaderProps {
-  onImageLoaded?: (dataUrl: string, width: number, height: number) => void;
-}
-
-export function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
+export function ImageUploader() {
+  const { t } = useTranslation();
   const { setStatus, setImportedImage, setError } = useUploadStore();
 
   const handleFileChange = useCallback(
     (file: File) => {
       if (!file.type.startsWith('image/')) {
-        message.error('请上传图片文件');
+        message.error(t('upload.invalidFile'));
         return;
       }
 
@@ -31,27 +30,26 @@ export function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
             height: img.height,
           });
           setStatus('ready');
-          onImageLoaded?.(dataUrl, img.width, img.height);
-          message.success('图片加载成功');
+          message.success(t('upload.imageLoaded'));
         };
 
         img.onerror = () => {
-          setError('图片加载失败');
-          message.error('图片加载失败');
+          setError(t('upload.uploadFailed'));
+          message.error(t('upload.uploadFailed'));
         };
 
         img.src = dataUrl;
       };
 
       reader.onerror = () => {
-        setError('文件读取失败');
-        message.error('文件读取失败');
+        setError(t('upload.uploadFailed'));
+        message.error(t('upload.uploadFailed'));
       };
 
       reader.readAsDataURL(file);
       return false;
     },
-    [setStatus, setImportedImage, setError, onImageLoaded]
+    [setStatus, setImportedImage, setError, t]
   );
 
   const handlePaste = useCallback(
@@ -86,7 +84,9 @@ export function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
         return false;
       }}
     >
-      <Button>上传图片</Button>
+      <Button icon={<UploadOutlined />} style={{ width: '100%' }}>
+        {t('upload.uploadImage')}
+      </Button>
     </Upload>
   );
 }

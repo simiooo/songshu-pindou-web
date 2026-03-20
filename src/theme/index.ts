@@ -2,36 +2,58 @@ import type { ThemeConfig } from 'antd';
 
 const theme: ThemeConfig = {
   token: {
-    colorPrimary: '#D4763B',
-    colorInfo: '#D4763B',
-    colorSuccess: '#6B9B37',
-    colorWarning: '#E6A23C',
-    colorError: '#C75B5B',
-    colorTextBase: '#2D2A26',
-    colorBgBase: '#FDFBF7',
-    borderRadius: 2,
-    fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+    colorPrimary: '#C4956A',
+    colorInfo: '#C4956A',
+    colorSuccess: '#7DB88F',
+    colorWarning: '#E5B567',
+    colorError: '#D47070',
+    colorTextBase: '#4A4A4A',
+    colorBgBase: '#FDFCFA',
+    colorBgLayout: '#F7F5F2',
+    colorBorder: '#EBEBEB',
+    colorBorderSecondary: '#F0F0F0',
+    borderRadius: 12,
+    borderRadiusSM: 8,
+    borderRadiusLG: 16,
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontSize: 14,
     lineHeight: 1.6,
-    borderRadiusSM: 2,
-    borderRadiusLG: 4,
-    wireframe: true,
+    wireframe: false,
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+    boxShadowSecondary: '0 4px 16px rgba(0, 0, 0, 0.08)',
   },
   components: {
     Button: {
-      primaryShadow: '2px 2px 0 #2D2A26',
-      defaultBorderColor: '#2D2A26',
-      defaultBg: '#FDFBF7',
-      defaultColor: '#2D2A26',
+      primaryShadow: '0 2px 6px rgba(196, 149, 106, 0.3)',
+      defaultShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+      fontWeight: 500,
     },
     Card: {
-      borderRadiusLG: 4,
+      borderRadiusLG: 16,
+      paddingLG: 24,
     },
     Input: {
-      borderRadiusSM: 2,
+      borderRadiusSM: 8,
     },
     Select: {
-      borderRadiusSM: 2,
+      borderRadiusSM: 8,
+    },
+    Tooltip: {
+      borderRadiusSM: 6,
+      paddingSM: 8,
+    },
+    Modal: {
+      borderRadiusLG: 20,
+    },
+    Menu: {
+      borderRadiusSM: 8,
+      itemBorderRadius: 8,
+    },
+    Dropdown: {
+      borderRadiusSM: 8,
+    },
+    Divider: {
+      margin: 12,
     },
   },
 };

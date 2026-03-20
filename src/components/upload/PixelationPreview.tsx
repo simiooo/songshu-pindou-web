@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Modal, Button, Spin, Alert } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { CanvasSize, ColorGroup, CanvasData } from '@/types/editor';
 import { DEFAULT_COLOR_GROUPS } from '@/constants/colorGroups';
 import { imageDataToCanvasData } from '@/utils/pixelation';
 import { exportToPNG } from '@/utils/exportUtils';
 import { useUploadStore } from '@/store/uploadStore';
+import { ZoomInOutlined, ZoomOutOutlined, ReloadOutlined } from '@ant-design/icons';
 
 interface PixelationPreviewProps {
   open: boolean;
@@ -23,6 +25,7 @@ export function PixelationPreview({
   onConfirm,
   onCancel,
 }: PixelationPreviewProps) {
+  const { t } = useTranslation();
   const {
     pixelationCanvasSize,
     selectedColorGroupId,
@@ -81,7 +84,7 @@ export function PixelationPreview({
       canvas.height = img.height;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        setError('无法创建画布上下文');
+        setError('Unable to create canvas context');
         setIsProcessing(false);
         processingRef.current = false;
         return;
@@ -104,7 +107,7 @@ export function PixelationPreview({
         (g: ColorGroup) => g.id === selectedColorGroupId
       );
       if (!colorGroup) {
-        setError('未选择色号组');
+        setError('No color group selected');
         setIsProcessing(false);
         processingRef.current = false;
         return;
@@ -128,7 +131,7 @@ export function PixelationPreview({
       setIsProcessing(false);
       processingRef.current = false;
     } catch {
-      setError('图片处理失败');
+      setError('Image processing failed');
       setIsProcessing(false);
       processingRef.current = false;
     }
@@ -149,10 +152,10 @@ export function PixelationPreview({
       processImage();
     };
     img.onerror = () => {
-      setError('图片加载失败');
+      setError('Failed to load image');
     };
     img.src = imageUrl;
-  }, [open, imageUrl, processImage]);
+  }, [open, imageUrl, processImage, setCropRegion]);
 
   useEffect(() => {
     if (!open) {
@@ -258,7 +261,7 @@ export function PixelationPreview({
     tempCanvas.height = processHeight;
     const ctx = tempCanvas.getContext('2d');
     if (!ctx) {
-      setError('无法创建画布上下文');
+      setError('Unable to create canvas context');
       setIsProcessing(false);
       return;
     }
@@ -269,7 +272,7 @@ export function PixelationPreview({
       (g: ColorGroup) => g.id === selectedColorGroupId
     );
     if (!colorGroup) {
-      setError('未选择色号组');
+      setError('No color group selected');
       setIsProcessing(false);
       return;
     }
@@ -306,31 +309,60 @@ export function PixelationPreview({
 
   return (
     <Modal
-      title="图片像素化预览"
+      title={t('pixelation.preview')}
       open={open}
       onCancel={onCancel}
       width={900}
       footer={[
         <Button key="cancel" onClick={onCancel}>
-          取消
+          {t('common.cancel')}
         </Button>,
         <Button key="confirm" type="primary" onClick={handleConfirm} disabled={isProcessing || !!error}>
-          应用到画布
+          {t('pixelation.apply')}
         </Button>,
       ]}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-md)',
+        }}
+      >
         {error && <Alert type="error" message={error} />}
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontWeight: 500, marginRight: 8 }}>画布尺寸:</span>
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--space-md)',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-sm)',
+              alignItems: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 500,
+                marginRight: 'var(--space-sm)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 13,
+              }}
+            >
+              {t('pixelation.canvasSize')}:
+            </span>
             <Button.Group>
               {[29, 52, 72, 104].map((size) => (
                 <Button
                   key={size}
                   type={pixelationCanvasSize === size ? 'primary' : 'default'}
                   onClick={() => setPixelationCanvasSize(size as CanvasSize)}
+                  size="small"
                 >
                   {size}
                 </Button>
@@ -338,14 +370,30 @@ export function PixelationPreview({
             </Button.Group>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontWeight: 500, marginRight: 8 }}>色号组:</span>
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-sm)',
+              alignItems: 'center',
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 500,
+                marginRight: 'var(--space-sm)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 13,
+              }}
+            >
+              {t('pixelation.colorGroup')}:
+            </span>
             <Button.Group>
               {DEFAULT_COLOR_GROUPS.map((group: ColorGroup) => (
                 <Button
                   key={group.id}
                   type={selectedColorGroupId === group.id ? 'primary' : 'default'}
                   onClick={() => setSelectedColorGroupId(group.id)}
+                  size="small"
                 >
                   {group.name}
                 </Button>
@@ -354,15 +402,63 @@ export function PixelationPreview({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--space-lg)',
+          }}
+        >
           <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label style={{ fontWeight: 500 }}>原图 (拖拽选择区域，Alt+拖拽平移，滚轮缩放)</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button size="small" onClick={handleZoomOut}>-</Button>
-                <span style={{ lineHeight: '24px', minWidth: 50, textAlign: 'center' }}>{(zoomLevel * 100).toFixed(0)}%</span>
-                <Button size="small" onClick={handleZoomIn}>+</Button>
-                <Button size="small" onClick={handleResetView}>重置</Button>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 'var(--space-sm)',
+              }}
+            >
+              <label
+                style={{
+                  fontWeight: 500,
+                  color: 'var(--color-text)',
+                  fontSize: 13,
+                }}
+              >
+                {t('pixelation.originalImage')}
+              </label>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 'var(--space-xs)',
+                  alignItems: 'center',
+                }}
+              >
+                <Button
+                  size="small"
+                  icon={<ZoomOutOutlined />}
+                  onClick={handleZoomOut}
+                />
+                <span
+                  style={{
+                    lineHeight: '24px',
+                    minWidth: 50,
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  {(zoomLevel * 100).toFixed(0)}%
+                </span>
+                <Button
+                  size="small"
+                  icon={<ZoomInOutlined />}
+                  onClick={handleZoomIn}
+                />
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={handleResetView}
+                />
               </div>
             </div>
             <div
@@ -375,10 +471,10 @@ export function PixelationPreview({
               style={{
                 width: containerSize,
                 height: containerSize,
-                border: '1px solid #e8e8e8',
-                borderRadius: 4,
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
-                background: '#fafafa',
+                background: 'var(--color-bg-secondary)',
                 position: 'relative',
                 cursor: isPanning ? 'grabbing' : isDragging ? 'crosshair' : 'grab',
               }}
@@ -409,8 +505,8 @@ export function PixelationPreview({
                     top: selectionBoxStyle.top,
                     width: selectionBoxStyle.width,
                     height: selectionBoxStyle.height,
-                    border: '2px solid #1890ff',
-                    background: 'rgba(24, 144, 255, 0.1)',
+                    border: '2px solid var(--color-primary)',
+                    background: 'rgba(196, 149, 106, 0.15)',
                     boxSizing: 'border-box',
                     pointerEvents: 'none',
                   }}
@@ -418,32 +514,54 @@ export function PixelationPreview({
               )}
             </div>
             {cropPercent && (
-              <p style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-                选中: {cropPercent.x}% × {cropPercent.y}%, 尺寸: {cropPercent.width}% × {cropPercent.height}%
+              <p
+                style={{
+                  marginTop: 'var(--space-sm)',
+                  fontSize: 11,
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                {t('pixelation.selected')}: {cropPercent.x}% × {cropPercent.y}%, {t('pixelation.size')}: {cropPercent.width}% × {cropPercent.height}%
               </p>
             )}
-            <p style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-              尺寸: {imageWidth} × {imageHeight}px | 显示: {displayWidth.toFixed(0)} × {displayHeight.toFixed(0)}px
+            <p
+              style={{
+                marginTop: 'var(--space-xs)',
+                fontSize: 11,
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              {t('pixelation.dimensions')}: {imageWidth} × {imageHeight}px | {t('pixelation.display')}: {displayWidth.toFixed(0)} × {displayHeight.toFixed(0)}px
             </p>
           </div>
 
           <div style={{ flex: 1 }}>
-            <label style={{ fontWeight: 500, display: 'block', marginBottom: 8 }}>像素化预览 ({pixelationCanvasSize}×{pixelationCanvasSize})</label>
+            <label
+              style={{
+                fontWeight: 500,
+                color: 'var(--color-text)',
+                fontSize: 13,
+                display: 'block',
+                marginBottom: 'var(--space-sm)',
+              }}
+            >
+              {t('pixelation.pixelatedPreview')} ({pixelationCanvasSize}×{pixelationCanvasSize})
+            </label>
             <div
               style={{
                 width: containerSize,
                 height: containerSize,
-                border: '1px solid #e8e8e8',
-                borderRadius: 4,
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
-                background: '#fff',
+                background: 'var(--color-bg)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
               {isProcessing ? (
-                <Spin tip="处理中..." />
+                <Spin tip={t('pixelation.processing')} />
               ) : previewUrl ? (
                 <img
                   src={previewUrl}
@@ -455,11 +573,19 @@ export function PixelationPreview({
                   }}
                 />
               ) : (
-                <span style={{ color: '#999' }}>等待处理...</span>
+                <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
+                  {t('pixelation.waitProcess')}
+                </span>
               )}
             </div>
-            <p style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-              尺寸: {pixelationCanvasSize} × {pixelationCanvasSize} 颗粒 | 抖动: {enableDithering ? '启用' : '关闭'}
+            <p
+              style={{
+                marginTop: 'var(--space-sm)',
+                fontSize: 11,
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              {t('pixelation.size')}: {pixelationCanvasSize} × {pixelationCanvasSize} {t('pixelation.pixelUnit')} | {t('pixelation.dithering')}: {enableDithering ? t('pixelation.enabled') : t('pixelation.disabled')}
             </p>
           </div>
         </div>
