@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useThrottleFn } from 'ahooks';
 import { Modal, Button, Spin, Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { CanvasSize, ColorGroup, CanvasData } from '@/types/editor';
@@ -18,6 +17,13 @@ interface PixelationPreviewProps {
   onCancel: () => void;
 }
 
+interface CropRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export function PixelationPreview({
   open,
   imageUrl,
@@ -31,27 +37,41 @@ export function PixelationPreview({
     pixelationCanvasSize,
     selectedColorGroupId,
     enableDithering,
-    cropRegion,
-    zoomLevel,
+    cropRegion: storeCropRegion,
     setPixelationCanvasSize,
     setSelectedColorGroupId,
     setCropRegion,
-    setZoomLevel,
   } = useUploadStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ imageX: number; imageY: number } | null>(null);
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState<{ clientX: number; clientY: number; panX: number; panY: number } | null>(null);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const previewImageRef = useRef<HTMLImageElement | null>(null);
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const processingRef = useRef(false);
   const isFirstLoadRef = useRef(true);
+  const dpr = useRef(window.devicePixelRatio || 1).current;
+
+  const stateRef = useRef({
+    isDragging: false,
+    isPanning: false,
+    isMoving: false,
+    dragStart: null as { imageX: number; imageY: number } | null,
+    panStart: null as { clientX: number; clientY: number; panX: number; panY: number } | null,
+    panOffset: { x: 0, y: 0 },
+    cropRegion: null as CropRegion | null,
+    zoomLevel: 1,
+    moveStart: null as { imageX: number; imageY: number; cropX: number; cropY: number } | null,
+  });
+
+  const [cropRegion, setCropRegionState] = useState<CropRegion | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [displayZoom, setDisplayZoom] = useState(100);
 
   const containerSize = 400;
 
@@ -62,14 +82,14 @@ export function PixelationPreview({
     return { displayWidth: dw, displayHeight: dh };
   }, [imageWidth, imageHeight]);
 
-  const imageLeft = panOffset.x + (containerSize - displayWidth * zoomLevel) / 2;
-  const imageTop = panOffset.y + (containerSize - displayHeight * zoomLevel) / 2;
-
   const containerToImage = useCallback((containerX: number, containerY: number) => {
-    const imageX = (containerX - imageLeft) / zoomLevel;
-    const imageY = (containerY - imageTop) / zoomLevel;
-    return { imageX, imageY };
-  }, [imageLeft, imageTop, zoomLevel]);
+    const { panOffset, zoomLevel } = stateRef.current;
+    const imageLeft = panOffset.x + (containerSize - displayWidth * zoomLevel) / 2;
+    const imageTop = panOffset.y + (containerSize - displayHeight * zoomLevel) / 2;
+    const imgX = (containerX - imageLeft) / zoomLevel;
+    const imgY = (containerY - imageTop) / zoomLevel;
+    return { imageX: imgX, imageY: imgY };
+  }, [displayWidth, displayHeight]);
 
   const processImage = useCallback(() => {
     if (!imageRef.current || processingRef.current) return;
@@ -94,13 +114,14 @@ export function PixelationPreview({
       ctx.drawImage(img, 0, 0);
       let imageData = ctx.getImageData(0, 0, img.width, img.height);
 
-      if (cropRegion && cropRegion.width > 0 && cropRegion.height > 0) {
+      const effectiveCrop = stateRef.current.cropRegion || storeCropRegion;
+      if (effectiveCrop && effectiveCrop.width > 0 && effectiveCrop.height > 0) {
         const scaleX = img.width / displayWidth;
         const scaleY = img.height / displayHeight;
-        const sx = Math.floor(cropRegion.x * scaleX);
-        const sy = Math.floor(cropRegion.y * scaleY);
-        const sw = Math.floor(cropRegion.width * scaleX);
-        const sh = Math.floor(cropRegion.height * scaleY);
+        const sx = Math.floor(effectiveCrop.x * scaleX);
+        const sy = Math.floor(effectiveCrop.y * scaleY);
+        const sw = Math.floor(effectiveCrop.width * scaleX);
+        const sh = Math.floor(effectiveCrop.height * scaleY);
         imageData = ctx.getImageData(sx, sy, sw, sh);
       }
 
@@ -121,14 +142,18 @@ export function PixelationPreview({
         enableDithering
       );
 
-      const previewDataUrl = exportToPNG({
+      const previewUrl = exportToPNG({
         canvasData,
         canvasSize: pixelationCanvasSize,
         pixelSize: 8,
         backgroundColor: '#FFFFFF',
       });
 
-      setPreviewUrl(previewDataUrl);
+      const previewImg = new Image();
+      previewImg.src = previewUrl;
+      previewImg.onload = () => {
+        previewImageRef.current = previewImg;
+      };
       setIsProcessing(false);
       processingRef.current = false;
     } catch {
@@ -136,7 +161,7 @@ export function PixelationPreview({
       setIsProcessing(false);
       processingRef.current = false;
     }
-  }, [pixelationCanvasSize, selectedColorGroupId, enableDithering, cropRegion, displayWidth, displayHeight]);
+  }, [pixelationCanvasSize, selectedColorGroupId, enableDithering, storeCropRegion, displayWidth, displayHeight]);
 
   useEffect(() => {
     if (!open || !imageUrl) return;
@@ -147,7 +172,19 @@ export function PixelationPreview({
       imageRef.current = img;
       if (isFirstLoadRef.current) {
         isFirstLoadRef.current = false;
-        setPanOffset({ x: 0, y: 0 });
+        stateRef.current = {
+          isDragging: false,
+          isPanning: false,
+          isMoving: false,
+          dragStart: null,
+          panStart: null,
+          panOffset: { x: 0, y: 0 },
+          cropRegion: null,
+          zoomLevel: 1,
+          moveStart: null,
+        };
+        setDisplayZoom(100);
+        setCropRegionState(null);
         setCropRegion(null);
       }
       processImage();
@@ -164,7 +201,125 @@ export function PixelationPreview({
     }
   }, [open]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const drawCanvas = useCallback(() => {
+    const canvas = imageCanvasRef.current;
+    const img = imageRef.current;
+    if (!canvas || !img) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const displayWidthPx = containerSize * dpr;
+    const displayHeightPx = containerSize * dpr;
+
+    if (canvas.width !== displayWidthPx || canvas.height !== displayHeightPx) {
+      canvas.width = displayWidthPx;
+      canvas.height = displayHeightPx;
+      canvas.style.width = `${containerSize}px`;
+      canvas.style.height = `${containerSize}px`;
+    }
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = '#f0f0f0';
+    ctx.fillRect(0, 0, containerSize, containerSize);
+
+    const { panOffset, zoomLevel, cropRegion: currentCrop } = stateRef.current;
+
+    ctx.save();
+    ctx.translate(containerSize / 2 + panOffset.x, containerSize / 2 + panOffset.y);
+    ctx.scale(zoomLevel, zoomLevel);
+    ctx.drawImage(img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
+    ctx.restore();
+
+    if (currentCrop && currentCrop.width > 0 && currentCrop.height > 0) {
+      const selLeft = containerSize / 2 + panOffset.x + (currentCrop.x - displayWidth / 2) * zoomLevel;
+      const selTop = containerSize / 2 + panOffset.y + (currentCrop.y - displayHeight / 2) * zoomLevel;
+      const selWidth = currentCrop.width * zoomLevel;
+      const selHeight = currentCrop.height * zoomLevel;
+
+      ctx.fillStyle = 'rgba(196, 149, 106, 0.2)';
+      ctx.fillRect(selLeft, selTop, selWidth, selHeight);
+
+      ctx.strokeStyle = '#c4956a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(selLeft, selTop, selWidth, selHeight);
+
+      const handleSize = 8;
+      ctx.fillStyle = '#c4956a';
+      ctx.fillRect(selLeft - handleSize / 2, selTop - handleSize / 2, handleSize, handleSize);
+      ctx.fillRect(selLeft + selWidth - handleSize / 2, selTop - handleSize / 2, handleSize, handleSize);
+      ctx.fillRect(selLeft - handleSize / 2, selTop + selHeight - handleSize / 2, handleSize, handleSize);
+      ctx.fillRect(selLeft + selWidth - handleSize / 2, selTop + selHeight - handleSize / 2, handleSize, handleSize);
+    }
+  }, [displayWidth, displayHeight, dpr]);
+
+  const drawPreview = useCallback(() => {
+    const canvas = previewCanvasRef.current;
+    const previewImg = previewImageRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const displayWidthPx = containerSize * dpr;
+    const displayHeightPx = containerSize * dpr;
+
+    if (canvas.width !== displayWidthPx || canvas.height !== displayHeightPx) {
+      canvas.width = displayWidthPx;
+      canvas.height = displayHeightPx;
+      canvas.style.width = `${containerSize}px`;
+      canvas.style.height = `${containerSize}px`;
+    }
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, containerSize, containerSize);
+
+    if (previewImg && previewImg.complete) {
+      const srcWidth = previewImg.width;
+      const srcHeight = previewImg.height;
+      const srcSize = Math.min(srcWidth, srcHeight);
+      const scale = containerSize / srcSize;
+      const scaledSize = srcSize * scale;
+      const sx = (srcWidth - srcSize) / 2;
+      const sy = (srcHeight - srcSize) / 2;
+      const dx = (containerSize - scaledSize) / 2;
+      const dy = (containerSize - scaledSize) / 2;
+      ctx.drawImage(previewImg, sx, sy, srcSize, srcSize, dx, dy, scaledSize, scaledSize);
+    }
+  }, [dpr]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const render = () => {
+      drawCanvas();
+      drawPreview();
+      animationFrameRef.current = requestAnimationFrame(render);
+    };
+    animationFrameRef.current = requestAnimationFrame(render);
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [open, drawCanvas, drawPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      imageRef.current = null;
+      previewImageRef.current = null;
+    };
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -175,70 +330,118 @@ export function PixelationPreview({
 
     if (e.altKey) {
       setIsPanning(true);
-      setPanStart({ clientX: e.clientX, clientY: e.clientY, panX: panOffset.x, panY: panOffset.y });
+      stateRef.current.isPanning = true;
+      stateRef.current.panStart = { clientX: e.clientX, clientY: e.clientY, panX: stateRef.current.panOffset.x, panY: stateRef.current.panOffset.y };
     } else {
-      setIsDragging(true);
-      setDragStart({ imageX, imageY });
-      setCropRegion({ x: imageX, y: imageY, width: 0, height: 0 });
-    }
-  };
-
-  const { run: throttledMouseMove } = useThrottleFn(
-    (e: React.MouseEvent) => {
-      if (isPanning && panStart) {
-        const dx = e.clientX - panStart.clientX;
-        const dy = e.clientY - panStart.clientY;
-        setPanOffset({ x: panStart.panX + dx, y: panStart.panY + dy });
-      } else if (isDragging && dragStart) {
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const containerX = e.clientX - rect.left;
-        const containerY = e.clientY - rect.top;
-        const { imageX, imageY } = containerToImage(containerX, containerY);
-
-        const minX = Math.min(dragStart.imageX, imageX);
-        const minY = Math.min(dragStart.imageY, imageY);
-        const width = Math.abs(imageX - dragStart.imageX);
-        const height = Math.abs(imageY - dragStart.imageY);
-
-        setCropRegion({ x: minX, y: minY, width, height });
+      const existingCrop = stateRef.current.cropRegion;
+      if (existingCrop && existingCrop.width > 0 && existingCrop.height > 0) {
+        if (imageX >= existingCrop.x && imageX <= existingCrop.x + existingCrop.width &&
+            imageY >= existingCrop.y && imageY <= existingCrop.y + existingCrop.height) {
+          setIsDragging(true);
+          stateRef.current.isMoving = true;
+          stateRef.current.moveStart = { 
+            imageX, 
+            imageY, 
+            cropX: existingCrop.x, 
+            cropY: existingCrop.y 
+          };
+          return;
+        }
       }
-    },
-    { wait: 16 }
-  );
+      setIsDragging(true);
+      stateRef.current.isDragging = true;
+      stateRef.current.dragStart = { imageX, imageY };
+      stateRef.current.cropRegion = { x: imageX, y: imageY, width: 0, height: 0 };
+    }
+  }, [containerToImage]);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    throttledMouseMove(e);
-  };
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-  const handleMouseUp = () => {
+    const containerX = e.clientX - rect.left;
+    const containerY = e.clientY - rect.top;
+    const { imageX, imageY } = containerToImage(containerX, containerY);
+
+    if (stateRef.current.isPanning && stateRef.current.panStart) {
+      const dx = e.clientX - stateRef.current.panStart.clientX;
+      const dy = e.clientY - stateRef.current.panStart.clientY;
+      const newOffset = { x: stateRef.current.panStart.panX + dx, y: stateRef.current.panStart.panY + dy };
+      stateRef.current.panOffset = newOffset;
+    } else if (stateRef.current.isMoving && stateRef.current.moveStart) {
+      const deltaX = imageX - stateRef.current.moveStart.imageX;
+      const deltaY = imageY - stateRef.current.moveStart.imageY;
+      const newX = stateRef.current.moveStart.cropX + deltaX;
+      const newY = stateRef.current.moveStart.cropY + deltaY;
+      stateRef.current.cropRegion = {
+        x: newX,
+        y: newY,
+        width: stateRef.current.cropRegion?.width || 0,
+        height: stateRef.current.cropRegion?.height || 0,
+      };
+    } else if (stateRef.current.isDragging && stateRef.current.dragStart) {
+      const startX = stateRef.current.dragStart.imageX;
+      const startY = stateRef.current.dragStart.imageY;
+      const deltaX = imageX - startX;
+      const deltaY = imageY - startY;
+      const size = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+      const x = deltaX < 0 ? startX - size : startX;
+      const y = deltaY < 0 ? startY - size : startY;
+      stateRef.current.cropRegion = { x, y, width: size, height: size };
+    }
+  }, [containerToImage]);
+
+  const handleMouseUp = useCallback(() => {
+    const crop = stateRef.current.cropRegion;
+    if (stateRef.current.isMoving && crop) {
+      setCropRegionState({ ...crop });
+      setCropRegion({ ...crop });
+    } else if (stateRef.current.isDragging && crop) {
+      if (crop.width > 5 && crop.height > 5) {
+        setCropRegionState(crop);
+        setCropRegion(crop);
+      }
+    }
     setIsDragging(false);
     setIsPanning(false);
-    setDragStart(null);
-    setPanStart(null);
-  };
+    stateRef.current.isDragging = false;
+    stateRef.current.isPanning = false;
+    stateRef.current.isMoving = false;
+    stateRef.current.dragStart = null;
+    stateRef.current.panStart = null;
+    stateRef.current.moveStart = null;
+  }, [setCropRegion]);
 
-  const handleWheel = (e: React.WheelEvent) => {
+  const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(Math.max(zoomLevel * delta, 0.5), 5);
-    setZoomLevel(newZoom);
-  };
+    const newZoom = Math.min(Math.max(stateRef.current.zoomLevel * delta, 0.5), 5);
+    stateRef.current.zoomLevel = newZoom;
+    setDisplayZoom(Math.round(newZoom * 100));
+  }, []);
 
-  const handleZoomIn = () => {
-    setZoomLevel(Math.min(zoomLevel * 1.2, 5));
-  };
+  const handleZoomIn = useCallback(() => {
+    const newZoom = Math.min(stateRef.current.zoomLevel * 1.2, 5);
+    stateRef.current.zoomLevel = newZoom;
+    setDisplayZoom(Math.round(newZoom * 100));
+  }, []);
 
-  const handleZoomOut = () => {
-    setZoomLevel(Math.max(zoomLevel * 0.8, 0.5));
-  };
+  const handleZoomOut = useCallback(() => {
+    const newZoom = Math.max(stateRef.current.zoomLevel * 0.8, 0.5);
+    stateRef.current.zoomLevel = newZoom;
+    setDisplayZoom(Math.round(newZoom * 100));
+  }, []);
 
-  const handleResetView = () => {
-    setZoomLevel(1);
-    setPanOffset({ x: 0, y: 0 });
+  const handleResetView = useCallback(() => {
+    stateRef.current.zoomLevel = 1;
+    stateRef.current.panOffset = { x: 0, y: 0 };
+    stateRef.current.cropRegion = null;
+    setDisplayZoom(100);
+    setCropRegionState(null);
     setCropRegion(null);
-  };
+  }, [setCropRegion]);
 
   const handleConfirm = useCallback(() => {
     if (!imageRef.current) return;
@@ -252,13 +455,14 @@ export function PixelationPreview({
     let sx = 0;
     let sy = 0;
 
-    if (cropRegion && cropRegion.width > 0 && cropRegion.height > 0) {
+    const crop = stateRef.current.cropRegion || storeCropRegion;
+    if (crop && crop.width > 0 && crop.height > 0) {
       const scaleX = img.width / displayWidth;
       const scaleY = img.height / displayHeight;
-      sx = Math.floor(cropRegion.x * scaleX);
-      sy = Math.floor(cropRegion.y * scaleY);
-      processWidth = Math.floor(cropRegion.width * scaleX);
-      processHeight = Math.floor(cropRegion.height * scaleY);
+      sx = Math.floor(crop.x * scaleX);
+      sy = Math.floor(crop.y * scaleY);
+      processWidth = Math.floor(crop.width * scaleX);
+      processHeight = Math.floor(crop.height * scaleY);
     } else {
       processWidth = img.width;
       processHeight = img.height;
@@ -294,26 +498,17 @@ export function PixelationPreview({
 
     onConfirm(canvasData, pixelationCanvasSize);
     setIsProcessing(false);
-  }, [pixelationCanvasSize, selectedColorGroupId, enableDithering, cropRegion, displayWidth, displayHeight, onConfirm]);
+  }, [pixelationCanvasSize, selectedColorGroupId, enableDithering, storeCropRegion, displayWidth, displayHeight, onConfirm]);
 
-  const cropPercent = cropRegion && displayWidth > 0 && displayHeight > 0
+  const effectiveCrop = cropRegion;
+  const cropPercent = effectiveCrop && displayWidth > 0 && displayHeight > 0
     ? {
-        x: ((cropRegion.x / displayWidth) * 100).toFixed(1),
-        y: ((cropRegion.y / displayHeight) * 100).toFixed(1),
-        width: ((cropRegion.width / displayWidth) * 100).toFixed(1),
-        height: ((cropRegion.height / displayHeight) * 100).toFixed(1),
+        x: ((effectiveCrop.x / displayWidth) * 100).toFixed(1),
+        y: ((effectiveCrop.y / displayHeight) * 100).toFixed(1),
+        width: ((effectiveCrop.width / displayWidth) * 100).toFixed(1),
+        height: ((effectiveCrop.height / displayHeight) * 100).toFixed(1),
       }
     : null;
-
-  const selectionBoxStyle = useMemo(() => {
-    if (!cropRegion || cropRegion.width <= 0 || cropRegion.height <= 0) return null;
-    return {
-      left: imageLeft + cropRegion.x * zoomLevel,
-      top: imageTop + cropRegion.y * zoomLevel,
-      width: cropRegion.width * zoomLevel,
-      height: cropRegion.height * zoomLevel,
-    };
-  }, [cropRegion, imageLeft, imageTop, zoomLevel]);
 
   return (
     <Modal
@@ -455,7 +650,7 @@ export function PixelationPreview({
                     color: 'var(--color-text-secondary)',
                   }}
                 >
-                  {(zoomLevel * 100).toFixed(0)}%
+                  {displayZoom}%
                 </span>
                 <Button
                   size="small"
@@ -487,39 +682,14 @@ export function PixelationPreview({
                 cursor: isPanning ? 'grabbing' : isDragging ? 'crosshair' : 'grab',
               }}
             >
-              <div
+              <canvas
+                ref={imageCanvasRef}
                 style={{
-                  position: 'absolute',
-                  left: containerSize / 2,
-                  top: containerSize / 2,
-                  transformOrigin: 'center center',
-                  transform: `translate(calc(-50% + ${panOffset.x}px), calc(-50% + ${panOffset.y}px)) scale(${zoomLevel})`,
+                  display: 'block',
+                  width: containerSize,
+                  height: containerSize,
                 }}
-              >
-                <img
-                  src={imageUrl}
-                  alt="Original"
-                  width={displayWidth}
-                  height={displayHeight}
-                  draggable={false}
-                  style={{ display: 'block' }}
-                />
-              </div>
-              {selectionBoxStyle && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: selectionBoxStyle.left,
-                    top: selectionBoxStyle.top,
-                    width: selectionBoxStyle.width,
-                    height: selectionBoxStyle.height,
-                    border: '2px solid var(--color-primary)',
-                    background: 'rgba(196, 149, 106, 0.15)',
-                    boxSizing: 'border-box',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
+              />
             </div>
             {cropPercent && (
               <p
@@ -577,27 +747,22 @@ export function PixelationPreview({
                 borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
                 background: 'var(--color-bg)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                position: 'relative',
               }}
             >
               {isProcessing ? (
-                <Spin tip={t('pixelation.processing')} />
-              ) : previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt="Pixelated Preview"
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Spin tip={t('pixelation.processing')} />
+                </div>
+              ) : (
+                <canvas
+                  ref={previewCanvasRef}
                   style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain',
+                    display: 'block',
+                    width: containerSize,
+                    height: containerSize,
                   }}
                 />
-              ) : (
-                <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
-                  {t('pixelation.waitProcess')}
-                </span>
               )}
             </div>
             <p
