@@ -439,7 +439,7 @@ export function EditorPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'auto',
-                    background: '#e8e8e8',
+                    background: currentTheme === 'dark' ? '#2a2a2a' : '#e8e8e8',
                     padding: isMobile ? 8 : 24,
                   }}
                 >
