@@ -603,6 +603,12 @@ export function EditorPage() {
                 open={showColorPalette}
                 height="60vh"
                 styles={{
+                  root: { borderTopLeftRadius: 'var(--radius-lg)', borderTopRightRadius: 'var(--radius-lg)' },
+                  wrapper: { 
+                    borderTopLeftRadius: 'var(--radius-lg)', 
+                    borderTopRightRadius: 'var(--radius-lg)',
+                    overflow: 'hidden',
+                  },
                   body: { padding: 'var(--space-md)', overflow: 'auto' },
                   header: { borderBottom: '1px solid var(--color-border-light)', padding: 'var(--space-sm) var(--space-md)' },
                 }}
