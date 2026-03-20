@@ -48,6 +48,8 @@ export default {
     imageLoaded: '照片添加成功',
     uploadFailed: '照片加载失败',
     invalidFile: '请上传图片文件',
+    addPhoto: '添加照片',
+    dropOrClick: '点击或拖拽上传图片',
   },
   pixelation: {
     preview: '图片像素化预览',

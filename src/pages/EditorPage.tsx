@@ -1,15 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
-import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space, Tooltip, Drawer } from 'antd';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space, Tooltip, Drawer, Upload } from 'antd';
 import type { MenuProps } from 'antd';
+import type { RcFile } from 'antd/es/upload';
 import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
 import { ColorPalette } from '@/components/editor/ColorPalette';
 import { CanvasSizeSelector } from '@/components/editor/CanvasSizeSelector';
-import { ImageUploader } from '@/components/upload/ImageUploader';
 import { PixelationPreview } from '@/components/upload/PixelationPreview';
 import { LLMProviderManager } from '@/components/llm/LLMProviderManager';
 import { AppHeader } from '@/components/layout/AppHeader';
-import { FloatingToolbar } from '@/components/editor/Toolbar';
 import { useEditorStore } from '@/store/editorStore';
 import { useUploadStore } from '@/store/uploadStore';
 import { useUIStore } from '@/store/uiStore';
@@ -306,7 +305,33 @@ function MobileToolPanel() {
         >
           {t('upload.title')}
         </div>
-        <ImageUploader />
+        <Upload
+          accept="image/*"
+          showUploadList={false}
+          beforeUpload={(file: RcFile) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const dataUrl = e.target?.result as string;
+              const img = new Image();
+              img.onload = () => {
+                useUploadStore.getState().setImportedImage({
+                  dataUrl,
+                  width: img.width,
+                  height: img.height,
+                });
+                useUploadStore.getState().setStatus('ready');
+                message.success(t('upload.imageLoaded'));
+              };
+              img.src = dataUrl;
+            };
+            reader.readAsDataURL(file);
+            return false;
+          }}
+        >
+          <Button icon={<UploadOutlined />} style={{ width: '100%' }}>
+            {t('upload.uploadImage')}
+          </Button>
+        </Upload>
       </div>
     </div>
   );
@@ -327,11 +352,45 @@ export function EditorPage() {
     loadCanvas,
   } = useEditorStore();
 
-  const { status, importedImage, reset: resetUpload } = useUploadStore();
+  const { status, importedImage, reset: resetUpload, setImportedImage, setStatus: setUploadStatus } = useUploadStore();
   const { theme: currentTheme } = useUIStore();
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showColorPalette, setShowColorPalette] = useState(true);
+
+  const hasImage = useMemo(() => {
+    return canvasData.some((row) => row.some((pixel) => pixel.filled));
+  }, [canvasData]);
+
+  const handleFileUpload = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) {
+      message.error(t('upload.invalidFile'));
+      return;
+    }
+    setUploadStatus('uploading');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        setImportedImage({
+          dataUrl,
+          width: img.width,
+          height: img.height,
+        });
+        setUploadStatus('ready');
+        message.success(t('upload.imageLoaded'));
+      };
+      img.onerror = () => {
+        message.error(t('upload.uploadFailed'));
+      };
+      img.src = dataUrl;
+    };
+    reader.onerror = () => {
+      message.error(t('upload.uploadFailed'));
+    };
+    reader.readAsDataURL(file);
+  }, [t, setImportedImage, setUploadStatus]);
 
   useAutoSave();
 
@@ -503,8 +562,51 @@ export function EditorPage() {
                     padding: isMobile ? 8 : 24,
                   }}
                 >
-                  <EditorCanvas showGrid={showGrid} gridColor={gridColor} />
-                  {!isMobile && <FloatingToolbar position="top-left" />}
+                  {hasImage ? (
+                    <EditorCanvas showGrid={showGrid} gridColor={gridColor} />
+                  ) : (
+                    <Upload
+                      accept="image/*"
+                      showUploadList={false}
+                      beforeUpload={(file: RcFile) => {
+                        handleFileUpload(file);
+                        return false;
+                      }}
+                    >
+                      <button
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 'var(--space-md)',
+                          width: 280,
+                          height: 280,
+                          border: '2px dashed var(--color-border)',
+                          borderRadius: 'var(--radius-lg)',
+                          background: 'var(--color-bg)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--color-primary)';
+                          e.currentTarget.style.background = 'var(--color-primary-bg)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--color-border)';
+                          e.currentTarget.style.background = 'var(--color-bg)';
+                        }}
+                      >
+                        <UploadOutlined style={{ fontSize: 48, color: 'var(--color-text-secondary)' }} />
+                        <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--color-text)' }}>
+                          {t('upload.addPhoto')}
+                        </span>
+                        <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                          {t('upload.dropOrClick')}
+                        </span>
+                      </button>
+                    </Upload>
+                  )}
                 </div>
 
                 {showColorPalette && !isMobile && (
@@ -525,15 +627,6 @@ export function EditorPage() {
                       }}
                     >
                       <CanvasSizeSelector />
-                    </div>
-
-                    <div
-                      style={{
-                        padding: 'var(--space-md)',
-                        borderBottom: '1px solid var(--color-border-light)',
-                      }}
-                    >
-                      <ImageUploader />
                     </div>
 
                     <div

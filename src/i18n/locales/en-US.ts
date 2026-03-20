@@ -48,6 +48,8 @@ export default {
     imageLoaded: 'Photo added successfully',
     uploadFailed: 'Failed to load photo',
     invalidFile: 'Please upload an image file',
+    addPhoto: 'Add Photo',
+    dropOrClick: 'Click or drag to upload image',
   },
   pixelation: {
     preview: 'Preview',
