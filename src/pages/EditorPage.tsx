@@ -16,6 +16,7 @@ import { useUIStore } from '@/store/uiStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { exportToPNG, exportToJSON, downloadFile, downloadImage } from '@/utils/exportUtils';
 import { getTheme } from '@/theme';
+import { CANVAS_SIZES } from '@/constants/colorGroups';
 import type { CanvasData, CanvasSize, EditorTool } from '@/types/editor';
 import {
   UploadOutlined,
@@ -44,6 +45,8 @@ function MobileToolPanel() {
     setColor,
     colorGroups,
     activeColorGroupId,
+    canvasSize,
+    setCanvasSize,
   } = useEditorStore();
 
   const tools: { key: EditorTool; icon: React.ReactNode; label: string }[] = [
@@ -247,6 +250,63 @@ function MobileToolPanel() {
             </Tooltip>
           ))}
         </div>
+      </div>
+
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: 'var(--space-sm)',
+          }}
+        >
+          {t('pixelation.canvasSize')}
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 'var(--space-xs)',
+          }}
+        >
+          {CANVAS_SIZES.map((size) => (
+            <button
+              key={size.value}
+              onClick={() => setCanvasSize(size.value)}
+              style={{
+                padding: 'var(--space-xs) var(--space-sm)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                background: canvasSize === size.value ? 'var(--color-primary-bg)' : 'var(--color-bg)',
+                color: canvasSize === size.value ? 'var(--color-primary)' : 'var(--color-text)',
+                cursor: 'pointer',
+                fontSize: 12,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {size.value}×{size.value}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: 'var(--space-sm)',
+          }}
+        >
+          {t('upload.title')}
+        </div>
+        <ImageUploader />
       </div>
     </div>
   );
