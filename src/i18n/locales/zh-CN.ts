@@ -15,6 +15,8 @@ export default {
     add: '添加',
     settings: '设置',
     language: '语言',
+    darkMode: '深色模式',
+    lightMode: '浅色模式',
   },
   editor: {
     tools: '工具',
@@ -39,10 +41,10 @@ export default {
     colors: '色',
   },
   upload: {
-    uploadImage: '上传图片',
+    uploadImage: '添加照片',
     pasteImage: '粘贴图片',
-    imageLoaded: '图片加载成功',
-    uploadFailed: '图片加载失败',
+    imageLoaded: '照片添加成功',
+    uploadFailed: '照片加载失败',
     invalidFile: '请上传图片文件',
   },
   pixelation: {
@@ -84,14 +86,14 @@ export default {
     noProviders: '暂无 Provider，请点击"新增 Provider"添加',
   },
   export: {
-    exportProject: '导出作品',
+    exportProject: '保存作品',
     png1x: 'PNG (1x)',
     png2x: 'PNG (2x)',
     png4x: 'PNG (4x)',
     png8x: 'PNG (8x)',
     json: 'JSON (项目文件)',
-    exportSuccess: '导出成功',
-    exportFailed: '导出失败',
+    exportSuccess: '保存成功',
+    exportFailed: '保存失败',
   },
   save: {
     unsaved: '未保存',

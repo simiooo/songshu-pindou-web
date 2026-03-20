@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space } from 'antd';
+import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
@@ -12,11 +12,244 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useEditorStore } from '@/store/editorStore';
 import { useUploadStore } from '@/store/uploadStore';
+import { useUIStore } from '@/store/uiStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { exportToPNG, exportToJSON, downloadFile, downloadImage } from '@/utils/exportUtils';
-import theme from '@/theme';
-import type { CanvasData, CanvasSize } from '@/types/editor';
-import { UploadOutlined } from '@ant-design/icons';
+import { getTheme } from '@/theme';
+import type { CanvasData, CanvasSize, EditorTool } from '@/types/editor';
+import {
+  UploadOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  BgColorsOutlined,
+  BorderOutlined,
+  UndoOutlined,
+  RedoOutlined,
+  AppstoreOutlined,
+} from '@ant-design/icons';
+
+function MobileToolPanel() {
+  const { t } = useTranslation();
+  const {
+    currentTool,
+    setTool,
+    showGrid,
+    toggleGrid,
+    undo,
+    redo,
+    historyStack,
+    redoStack,
+    currentColor,
+    setColor,
+    colorGroups,
+    activeColorGroupId,
+  } = useEditorStore();
+
+  const tools: { key: EditorTool; icon: React.ReactNode; label: string }[] = [
+    { key: 'brush', icon: <EditOutlined />, label: t('editor.brush') },
+    { key: 'eraser', icon: <DeleteOutlined />, label: t('editor.eraser') },
+    { key: 'fill', icon: <BgColorsOutlined />, label: t('editor.fill') },
+    { key: 'selection', icon: <BorderOutlined />, label: t('editor.selection') },
+  ];
+
+  const canUndo = historyStack.length > 0;
+  const canRedo = redoStack.length > 0;
+
+  const activeGroup = colorGroups.find((g) => g.id === activeColorGroupId);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: 'var(--space-sm)',
+          }}
+        >
+          {t('editor.tools')}
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+          {tools.map((tool) => (
+            <Tooltip key={tool.key} title={tool.label}>
+              <button
+                onClick={() => setTool(tool.key)}
+                style={{
+                  width: 52,
+                  height: 52,
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  background:
+                    currentTool === tool.key ? 'var(--color-primary-bg)' : 'var(--color-bg-secondary)',
+                  color:
+                    currentTool === tool.key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                  transition: 'all 0.2s ease',
+                  boxShadow: currentTool === tool.key ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                {tool.icon}
+              </button>
+            </Tooltip>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+        <Tooltip title={`${t('editor.undo')} (${t('shortcuts.undo')})`}>
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            style={{
+              flex: 1,
+              height: 44,
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              background: canUndo ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
+              color: canUndo ? 'var(--color-text)' : 'var(--color-text-secondary)',
+              cursor: canUndo ? 'pointer' : 'not-allowed',
+              opacity: canUndo ? 1 : 0.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 'var(--space-xs)',
+              fontSize: 14,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <UndoOutlined />
+            {t('editor.undo')}
+          </button>
+        </Tooltip>
+        <Tooltip title={`${t('editor.redo')} (${t('shortcuts.redo')})`}>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            style={{
+              flex: 1,
+              height: 44,
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              background: canRedo ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
+              color: canRedo ? 'var(--color-text)' : 'var(--color-text-secondary)',
+              cursor: canRedo ? 'pointer' : 'not-allowed',
+              opacity: canRedo ? 1 : 0.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 'var(--space-xs)',
+              fontSize: 14,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <RedoOutlined />
+            {t('editor.redo')}
+          </button>
+        </Tooltip>
+        <Tooltip title={`${t('editor.toggleGrid')} (${t('shortcuts.grid')})`}>
+          <button
+            onClick={toggleGrid}
+            style={{
+              width: 52,
+              height: 44,
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              background: showGrid ? 'var(--color-primary-bg)' : 'var(--color-bg-secondary)',
+              color: showGrid ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 16,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <AppstoreOutlined />
+          </button>
+        </Tooltip>
+      </div>
+
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: 'var(--space-sm)',
+          }}
+        >
+          {t('color.selectColor')}
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-md)',
+            marginBottom: 'var(--space-md)',
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 'var(--radius-md)',
+              background: currentColor,
+              border: '2px solid var(--color-bg)',
+              boxShadow: 'var(--shadow-md)',
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              color: 'var(--color-text)',
+            }}
+          >
+            {currentColor.toUpperCase()}
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(8, 1fr)',
+            gap: 'var(--space-xs)',
+          }}
+        >
+          {activeGroup?.colors.slice(0, 24).map((color) => (
+            <Tooltip key={color.code} title={`${color.code}`}>
+              <button
+                onClick={() => setColor(color.hex)}
+                style={{
+                  width: '100%',
+                  aspectRatio: '1',
+                  background: color.hex,
+                  border:
+                    currentColor === color.hex
+                      ? '3px solid var(--color-primary)'
+                      : '1px solid var(--color-border-light)',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: currentColor === color.hex ? 'var(--shadow-sm)' : 'none',
+                }}
+              />
+            </Tooltip>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function EditorPage() {
   const { t } = useTranslation();
@@ -34,6 +267,7 @@ export function EditorPage() {
   } = useEditorStore();
 
   const { status, importedImage, reset: resetUpload } = useUploadStore();
+  const { theme: currentTheme } = useUIStore();
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showColorPalette, setShowColorPalette] = useState(true);
@@ -161,7 +395,7 @@ export function EditorPage() {
   }, [setTool, toggleGrid, undo, redo]);
 
   return (
-    <ConfigProvider theme={theme}>
+    <ConfigProvider theme={getTheme(currentTheme)}>
       <AntdApp>
         <div
           style={{
@@ -271,32 +505,75 @@ export function EditorPage() {
           </div>
 
           {isMobile && (
-            <div
-              style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: 'var(--color-bg)',
-                borderTop: '1px solid var(--color-border-light)',
-                padding: 'var(--space-sm)',
-                display: 'flex',
-                gap: 'var(--space-sm)',
-                zIndex: 100,
-              }}
-            >
-              <Button
-                onClick={() => setShowColorPalette(!showColorPalette)}
-                style={{ flex: 1 }}
+            <>
+              <div
+                style={{
+                  position: 'fixed',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  background: 'var(--color-bg)',
+                  borderTop: '1px solid var(--color-border-light)',
+                  padding: 'var(--space-sm)',
+                  paddingBottom: 'calc(var(--space-sm) + env(safe-area-inset-bottom, 0px))',
+                  display: 'flex',
+                  gap: 'var(--space-sm)',
+                  zIndex: 100,
+                }}
               >
-                {showColorPalette ? t('editor.tools') : t('color.palette')}
-              </Button>
-              <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
-                <Button icon={<UploadOutlined />} style={{ flex: 1 }}>
-                  {t('common.export')}
+                <Button
+                  onClick={() => setShowColorPalette(!showColorPalette)}
+                  style={{ flex: 1, height: 50, fontSize: 15 }}
+                >
+                  {showColorPalette ? t('editor.tools') : t('color.palette')}
                 </Button>
-              </Dropdown>
-            </div>
+                <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
+                  <Button icon={<UploadOutlined />} style={{ flex: 1, height: 50, fontSize: 15 }}>
+                    {t('export.exportProject')}
+                  </Button>
+                </Dropdown>
+              </div>
+
+              {showColorPalette && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    bottom: 66,
+                    left: 0,
+                    right: 0,
+                    maxHeight: '60vh',
+                    background: 'var(--color-bg)',
+                    borderTopLeftRadius: 'var(--radius-lg)',
+                    borderTopRightRadius: 'var(--radius-lg)',
+                    boxShadow: 'var(--shadow-lg)',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    zIndex: 99,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 36,
+                      height: 5,
+                      background: 'var(--color-border)',
+                      borderRadius: 2.5,
+                      margin: '10px auto',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div
+                    style={{
+                      flex: 1,
+                      overflow: 'auto',
+                      padding: 'var(--space-md)',
+                    }}
+                  >
+                    <MobileToolPanel />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

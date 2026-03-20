@@ -123,67 +123,76 @@ export function Sidebar({ onSettingsClick }: SidebarProps) {
 
       <SidebarSection>
         <SectionLabel>{t('editor.history')}</SectionLabel>
-        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-          <Tooltip title={`${t('editor.undo')} (${t('shortcuts.undo')})`}>
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              style={{
-                flex: 1,
-                padding: 'var(--space-sm)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: canUndo ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
-                color: canUndo ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                cursor: canUndo ? 'pointer' : 'not-allowed',
-                opacity: canUndo ? 1 : 0.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 'var(--space-xs)',
-                fontSize: 13,
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <UndoOutlined />
-              {t('editor.undo')}
-            </button>
-          </Tooltip>
-          <Tooltip title={`${t('editor.redo')} (${t('shortcuts.redo')})`}>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              style={{
-                flex: 1,
-                padding: 'var(--space-sm)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: canRedo ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
-                color: canRedo ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                cursor: canRedo ? 'pointer' : 'not-allowed',
-                opacity: canRedo ? 1 : 0.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 'var(--space-xs)',
-                fontSize: 13,
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <RedoOutlined />
-              {t('editor.redo')}
-            </button>
-          </Tooltip>
-        </div>
         <div
           style={{
-            marginTop: 'var(--space-xs)',
-            fontSize: 11,
-            color: 'var(--color-text-secondary)',
-            textAlign: 'center',
+            maxHeight: 120,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-sm)',
           }}
         >
-          {historyStack.length} {t('editor.steps')} / {redoStack.length} {t('editor.redoSteps')}
+          <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+            <Tooltip title={`${t('editor.undo')} (${t('shortcuts.undo')})`}>
+              <button
+                onClick={undo}
+                disabled={!canUndo}
+                style={{
+                  flex: 1,
+                  padding: 'var(--space-sm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: canUndo ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
+                  color: canUndo ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                  cursor: canUndo ? 'pointer' : 'not-allowed',
+                  opacity: canUndo ? 1 : 0.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--space-xs)',
+                  fontSize: 13,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <UndoOutlined />
+                {t('editor.undo')}
+              </button>
+            </Tooltip>
+            <Tooltip title={`${t('editor.redo')} (${t('shortcuts.redo')})`}>
+              <button
+                onClick={redo}
+                disabled={!canRedo}
+                style={{
+                  flex: 1,
+                  padding: 'var(--space-sm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: canRedo ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
+                  color: canRedo ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                  cursor: canRedo ? 'pointer' : 'not-allowed',
+                  opacity: canRedo ? 1 : 0.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--space-xs)',
+                  fontSize: 13,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <RedoOutlined />
+                {t('editor.redo')}
+              </button>
+            </Tooltip>
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--color-text-secondary)',
+              textAlign: 'center',
+            }}
+          >
+            {historyStack.length} {t('editor.steps')} / {redoStack.length} {t('editor.redoSteps')}
+          </div>
         </div>
       </SidebarSection>
 
@@ -212,12 +221,25 @@ export function Sidebar({ onSettingsClick }: SidebarProps) {
         <div
           style={{
             padding: 'var(--space-sm) var(--space-md)',
-            background: 'var(--color-warning)',
-            color: '#fff',
+            background: 'var(--color-bg)',
+            borderTop: '1px solid var(--color-border-light)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--space-xs)',
             fontSize: 12,
-            textAlign: 'center',
+            color: 'var(--color-text-secondary)',
           }}
         >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: 'var(--color-warning)',
+              flexShrink: 0,
+            }}
+          />
           {t('save.unsaved')}
         </div>
       )}

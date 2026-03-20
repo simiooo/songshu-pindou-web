@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Select, Space } from 'antd';
+import { Select, Space, Button, Tooltip } from 'antd';
+import { useUIStore } from '@/store/uiStore';
+import { SunOutlined, MoonOutlined } from '@ant-design/icons';
 
 interface AppHeaderProps {
   collapsed?: boolean;
@@ -7,6 +9,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ collapsed }: AppHeaderProps) {
   const { t, i18n } = useTranslation();
+  const { theme, toggleTheme } = useUIStore();
 
   const languageOptions = [
     { value: 'zh-CN', label: '中文' },
@@ -61,6 +64,13 @@ export function AppHeader({ collapsed }: AppHeaderProps) {
       </div>
 
       <Space size="middle">
+        <Tooltip title={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}>
+          <Button
+            type="text"
+            icon={theme === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+            onClick={toggleTheme}
+          />
+        </Tooltip>
         <Select
           value={i18n.language}
           onChange={handleLanguageChange}
