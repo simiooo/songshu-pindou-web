@@ -15,6 +15,12 @@ export function AppHeader({ collapsed, onSettingsClick }: AppHeaderProps) {
   const languageOptions = [
     { value: 'zh-CN', label: '中文' },
     { value: 'en-US', label: 'English' },
+    { value: 'ja-JP', label: '日本語' },
+    { value: 'ko-KR', label: '한국어' },
+    { value: 'es-ES', label: 'Español' },
+    { value: 'vi-VN', label: 'Tiếng Việt' },
+    { value: 'th-TH', label: 'ไทย' },
+    { value: 'id-ID', label: 'Bahasa Indonesia' },
   ];
 
   const handleLanguageChange = (value: string) => {
