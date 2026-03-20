@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useKeyPress, useEventListener } from 'ahooks';
 import { useEditorStore } from '@/store/editorStore';
+import { useUIStore } from '@/store/uiStore';
 import type { EditorOperation } from '@/types/editor';
 
 interface EditorCanvasProps {
@@ -36,6 +37,8 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     setPanOffset,
     selection,
   } = useEditorStore();
+
+  const { theme } = useUIStore();
 
   useKeyPress('Escape', () => {
     if (currentTool === 'selection') {
@@ -172,6 +175,8 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
   }, [zoomLevel, setZoomLevel]);
 
   const dpr = useRef(window.devicePixelRatio || 1).current;
+  const isDark = theme === 'dark';
+  const canvasBackground = isDark ? '#1a1a1a' : '#ffffff';
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -194,7 +199,7 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     ctx.scale(dpr, dpr);
 
     ctx.clearRect(0, 0, logicalWidth, logicalHeight);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = canvasBackground;
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
     ctx.save();
@@ -211,7 +216,8 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     }
 
     if (showGrid) {
-      ctx.strokeStyle = gridColor === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.3)';
+      const gridStroke = isDark ? 'rgba(255,255,255,0.15)' : (gridColor === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.3)');
+      ctx.strokeStyle = gridStroke;
       ctx.lineWidth = 1 / zoomLevel;
 
       for (let i = 0; i <= canvasSize; i++) {
@@ -228,7 +234,7 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     }
 
     ctx.restore();
-  }, [canvasData, canvasSize, canvasWidth, canvasHeight, showGrid, gridColor, zoomLevel, logicalWidth, logicalHeight, dpr]);
+  }, [canvasData, canvasSize, canvasWidth, canvasHeight, showGrid, gridColor, zoomLevel, logicalWidth, logicalHeight, dpr, canvasBackground, isDark]);
 
   useEffect(() => {
     const render = () => {
@@ -285,13 +291,16 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     ? (isDragging ? 'move' : 'crosshair')
     : (currentTool === 'brush' || currentTool === 'eraser' ? 'crosshair' : 'default');
 
+  const containerBackground = isDark ? '#2a2a2a' : '#ffffff';
+  const containerShadow = isDark ? '0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.15)';
+
   return (
     <div
       style={{
         position: 'relative',
         display: 'inline-block',
-        background: '#fff',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        background: containerBackground,
+        boxShadow: containerShadow,
         borderRadius: 4,
         transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
         transition: isPanning ? 'none' : 'transform 0.1s ease-out',
