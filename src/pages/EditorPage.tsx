@@ -439,7 +439,8 @@ export function EditorPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'auto',
-                    padding: isMobile ? 'var(--space-md)' : 'var(--space-xl)',
+                    background: '#e8e8e8',
+                    padding: isMobile ? 8 : 24,
                   }}
                 >
                   <EditorCanvas showGrid={showGrid} gridColor={gridColor} />

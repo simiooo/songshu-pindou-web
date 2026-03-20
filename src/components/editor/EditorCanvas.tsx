@@ -12,12 +12,13 @@ const PIXEL_SIZE = 12;
 
 export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentOperations, setCurrentOperations] = useState<EditorOperation[]>([]);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<{ clientX: number; clientY: number; panX: number; panY: number } | null>(null);
   const [localSelection, setLocalSelection] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   const {
     canvasData,
@@ -46,17 +47,18 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
   const canvasWidth = canvasSize * PIXEL_SIZE;
   const canvasHeight = canvasSize * PIXEL_SIZE;
 
+  const logicalWidth = canvasWidth * zoomLevel;
+  const logicalHeight = canvasHeight * zoomLevel;
+
   const getPixelCoords = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
 
       const rect = canvas.getBoundingClientRect();
-      const visualWidth = rect.width;
-      const visualHeight = rect.height;
-      
-      const x = Math.floor((e.clientX - rect.left) / (visualWidth / canvasSize));
-      const y = Math.floor((e.clientY - rect.top) / (visualHeight / canvasSize));
+
+      const x = Math.floor((e.clientX - rect.left) / (rect.width / canvasSize));
+      const y = Math.floor((e.clientY - rect.top) / (rect.height / canvasSize));
 
       if (x < 0 || y < 0 || x >= canvasSize || y >= canvasSize) {
         return null;
@@ -161,11 +163,15 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
   }, [isDragging, currentOperations, pushHistory, currentTool, localSelection, setSelection]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.stopPropagation();
     e.preventDefault();
+
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.min(Math.max(zoomLevel * delta, 0.5), 5);
     setZoomLevel(newZoom);
   }, [zoomLevel, setZoomLevel]);
+
+  const dpr = useRef(window.devicePixelRatio || 1).current;
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -174,11 +180,25 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
+    const displayWidth = logicalWidth * dpr;
+    const displayHeight = logicalHeight * dpr;
 
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
+      canvas.style.width = `${logicalWidth}px`;
+      canvas.style.height = `${logicalHeight}px`;
+    }
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+
+    ctx.save();
+    ctx.scale(zoomLevel, zoomLevel);
 
     for (let y = 0; y < canvasSize; y++) {
       for (let x = 0; x < canvasSize; x++) {
@@ -192,7 +212,7 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
 
     if (showGrid) {
       ctx.strokeStyle = gridColor === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1 / zoomLevel;
 
       for (let i = 0; i <= canvasSize; i++) {
         ctx.beginPath();
@@ -206,10 +226,21 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
         ctx.stroke();
       }
     }
-  }, [canvasData, canvasSize, canvasWidth, canvasHeight, showGrid, gridColor]);
+
+    ctx.restore();
+  }, [canvasData, canvasSize, canvasWidth, canvasHeight, showGrid, gridColor, zoomLevel, logicalWidth, logicalHeight, dpr]);
 
   useEffect(() => {
-    drawCanvas();
+    const render = () => {
+      drawCanvas();
+      animationFrameRef.current = requestAnimationFrame(render);
+    };
+    animationFrameRef.current = requestAnimationFrame(render);
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
   }, [drawCanvas]);
 
   const handleGlobalMouseUp = useCallback(() => {
@@ -248,68 +279,50 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     };
   }, [localSelection, selection]);
 
+  const cursorStyle = isPanning
+    ? 'grabbing'
+    : currentTool === 'selection'
+    ? (isDragging ? 'move' : 'crosshair')
+    : (currentTool === 'brush' || currentTool === 'eraser' ? 'crosshair' : 'default');
+
   return (
     <div
-      ref={containerRef}
       style={{
+        position: 'relative',
+        display: 'inline-block',
         background: '#fff',
         boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         borderRadius: 4,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
+        transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
+        transition: isPanning ? 'none' : 'transform 0.1s ease-out',
       }}
     >
-      <div
+      <canvas
+        ref={canvasRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
         style={{
-          flex: 1,
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
+          display: 'block',
+          cursor: cursorStyle,
         }}
-      >
+      />
+      {selectionBox && currentTool === 'selection' && (
         <div
           style={{
-            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
-            transformOrigin: 'center center',
-            transition: isPanning ? 'none' : 'transform 0.1s ease-out',
-            position: 'relative',
+            position: 'absolute',
+            left: selectionBox.left * zoomLevel,
+            top: selectionBox.top * zoomLevel,
+            width: selectionBox.width * zoomLevel,
+            height: selectionBox.height * zoomLevel,
+            border: '2px dashed #D4763B',
+            boxSizing: 'border-box',
+            pointerEvents: 'none',
           }}
-          onWheel={handleWheel}
-        >
-          <canvas
-            ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            style={{
-              display: 'block',
-              cursor: isPanning 
-                ? 'grabbing' 
-                : (currentTool === 'selection' 
-                  ? (isDragging ? 'move' : 'crosshair')
-                  : (currentTool === 'brush' || currentTool === 'eraser' ? 'crosshair' : 'default')),
-            }}
-          />
-          {selectionBox && currentTool === 'selection' && (
-            <div
-              style={{
-                position: 'absolute',
-                left: selectionBox.left,
-                top: selectionBox.top,
-                width: selectionBox.width,
-                height: selectionBox.height,
-                border: '2px dashed #D4763B',
-                boxSizing: 'border-box',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-        </div>
-      </div>
+        />
+      )}
     </div>
   );
 }
