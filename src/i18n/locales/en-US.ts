@@ -24,6 +24,8 @@ export default {
     eraser: 'Eraser',
     fill: 'Fill',
     selection: 'Selection',
+    selectionHint: 'Drag to select area',
+    resetView: 'Reset View',
     view: 'View',
     toggleGrid: 'Toggle Grid',
     canvasSize: 'Canvas Size',

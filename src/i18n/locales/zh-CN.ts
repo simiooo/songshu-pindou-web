@@ -24,6 +24,8 @@ export default {
     eraser: '橡皮擦',
     fill: '填充',
     selection: '选择',
+    selectionHint: '拖拽框选区域',
+    resetView: '重置视图',
     view: '视图',
     toggleGrid: '切换网格',
     canvasSize: '画布尺寸',

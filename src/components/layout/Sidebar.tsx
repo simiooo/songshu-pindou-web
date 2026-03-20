@@ -30,11 +30,11 @@ export function Sidebar({ onSettingsClick }: SidebarProps) {
     isDirty,
   } = useEditorStore();
 
-  const tools: { key: EditorTool; icon: React.ReactNode; label: string; shortcut: string }[] = [
+  const tools: { key: EditorTool; icon: React.ReactNode; label: string; shortcut: string; hint?: string }[] = [
     { key: 'brush', icon: <EditOutlined />, label: t('editor.brush'), shortcut: t('shortcuts.brush') },
     { key: 'eraser', icon: <DeleteOutlined />, label: t('editor.eraser'), shortcut: t('shortcuts.eraser') },
     { key: 'fill', icon: <BgColorsOutlined />, label: t('editor.fill'), shortcut: t('shortcuts.fill') },
-    { key: 'selection', icon: <BorderOutlined />, label: t('editor.selection'), shortcut: t('shortcuts.selection') },
+    { key: 'selection', icon: <BorderOutlined />, label: t('editor.selection'), shortcut: t('shortcuts.selection'), hint: t('editor.selectionHint') },
   ];
 
   const canUndo = historyStack.length > 0;
@@ -69,7 +69,7 @@ export function Sidebar({ onSettingsClick }: SidebarProps) {
             }}
           >
             {tools.map((tool) => (
-              <Tooltip key={tool.key} title={`${tool.label} (${tool.shortcut})`}>
+              <Tooltip key={tool.key} title={tool.hint ? `${tool.label} (${tool.shortcut}) - ${tool.hint}` : `${tool.label} (${tool.shortcut})`}>
                 <button
                   onClick={() => setTool(tool.key)}
                   style={{

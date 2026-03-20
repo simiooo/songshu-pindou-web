@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useThrottleFn } from 'ahooks';
 import { Modal, Button, Spin, Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { CanvasSize, ColorGroup, CanvasData } from '@/types/editor';
@@ -182,26 +183,33 @@ export function PixelationPreview({
     }
   };
 
+  const { run: throttledMouseMove } = useThrottleFn(
+    (e: React.MouseEvent) => {
+      if (isPanning && panStart) {
+        const dx = e.clientX - panStart.clientX;
+        const dy = e.clientY - panStart.clientY;
+        setPanOffset({ x: panStart.panX + dx, y: panStart.panY + dy });
+      } else if (isDragging && dragStart) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const containerX = e.clientX - rect.left;
+        const containerY = e.clientY - rect.top;
+        const { imageX, imageY } = containerToImage(containerX, containerY);
+
+        const minX = Math.min(dragStart.imageX, imageX);
+        const minY = Math.min(dragStart.imageY, imageY);
+        const width = Math.abs(imageX - dragStart.imageX);
+        const height = Math.abs(imageY - dragStart.imageY);
+
+        setCropRegion({ x: minX, y: minY, width, height });
+      }
+    },
+    { wait: 16 }
+  );
+
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning && panStart) {
-      const dx = e.clientX - panStart.clientX;
-      const dy = e.clientY - panStart.clientY;
-      setPanOffset({ x: panStart.panX + dx, y: panStart.panY + dy });
-    } else if (isDragging && dragStart) {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const containerX = e.clientX - rect.left;
-      const containerY = e.clientY - rect.top;
-      const { imageX, imageY } = containerToImage(containerX, containerY);
-
-      const minX = Math.min(dragStart.imageX, imageX);
-      const minY = Math.min(dragStart.imageY, imageY);
-      const width = Math.abs(imageX - dragStart.imageX);
-      const height = Math.abs(imageY - dragStart.imageY);
-
-      setCropRegion({ x: minX, y: minY, width, height });
-    }
+    throttledMouseMove(e);
   };
 
   const handleMouseUp = () => {
@@ -533,6 +541,20 @@ export function PixelationPreview({
             >
               {t('pixelation.dimensions')}: {imageWidth} × {imageHeight}px | {t('pixelation.display')}: {displayWidth.toFixed(0)} × {displayHeight.toFixed(0)}px
             </p>
+            <div
+              style={{
+                marginTop: 'var(--space-sm)',
+                padding: 'var(--space-xs) var(--space-sm)',
+                background: 'var(--color-primary-bg)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 11,
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              <div><strong>{t('pixelation.dragSelect')}</strong></div>
+              <div>{t('pixelation.altDragPan')}</div>
+              <div>{t('pixelation.scrollZoom')}</div>
+            </div>
           </div>
 
           <div style={{ flex: 1 }}>

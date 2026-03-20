@@ -29,6 +29,8 @@ interface EditorStore {
   projectName: string;
   isDirty: boolean;
   lastSavedAt: number | null;
+  zoomLevel: number;
+  panOffset: { x: number; y: number };
 
   setCanvasSize: (size: CanvasSize) => void;
   initializeCanvas: () => void;
@@ -50,6 +52,9 @@ interface EditorStore {
   markSaved: () => void;
   loadCanvas: (data: CanvasData, size: CanvasSize) => void;
   applyOperations: (operations: EditorOperation[]) => void;
+  setZoomLevel: (level: number) => void;
+  setPanOffset: (offset: { x: number; y: number }) => void;
+  resetView: () => void;
 }
 
 const createEmptyCanvas = (size: CanvasSize): CanvasData => {
@@ -80,6 +85,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   projectName: '未命名项目',
   isDirty: false,
   lastSavedAt: null,
+  zoomLevel: 1,
+  panOffset: { x: 0, y: 0 },
 
   setCanvasSize: (size) => {
     set({ canvasSize: size });
@@ -348,4 +355,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
     set({ canvasData: newCanvasData, isDirty: true });
   },
+
+  setZoomLevel: (level) => set({ zoomLevel: Math.min(Math.max(level, 0.5), 5) }),
+
+  setPanOffset: (offset) => set({ panOffset: offset }),
+
+  resetView: () => set({ zoomLevel: 1, panOffset: { x: 0, y: 0 } }),
 }));

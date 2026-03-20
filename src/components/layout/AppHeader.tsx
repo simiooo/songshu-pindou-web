@@ -1,13 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { Select, Space, Button, Tooltip } from 'antd';
 import { useUIStore } from '@/store/uiStore';
-import { SunOutlined, MoonOutlined } from '@ant-design/icons';
+import { SunOutlined, MoonOutlined, SettingOutlined } from '@ant-design/icons';
 
 interface AppHeaderProps {
   collapsed?: boolean;
+  onSettingsClick?: () => void;
 }
 
-export function AppHeader({ collapsed }: AppHeaderProps) {
+export function AppHeader({ collapsed, onSettingsClick }: AppHeaderProps) {
   const { t, i18n } = useTranslation();
   const { theme, toggleTheme } = useUIStore();
 
@@ -71,6 +72,15 @@ export function AppHeader({ collapsed }: AppHeaderProps) {
             onClick={toggleTheme}
           />
         </Tooltip>
+        {onSettingsClick && (
+          <Tooltip title={t('common.settings')}>
+            <Button
+              type="text"
+              icon={<SettingOutlined />}
+              onClick={onSettingsClick}
+            />
+          </Tooltip>
+        )}
         <Select
           value={i18n.language}
           onChange={handleLanguageChange}

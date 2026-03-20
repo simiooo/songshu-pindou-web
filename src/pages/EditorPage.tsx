@@ -9,7 +9,7 @@ import { ImageUploader } from '@/components/upload/ImageUploader';
 import { PixelationPreview } from '@/components/upload/PixelationPreview';
 import { LLMProviderManager } from '@/components/llm/LLMProviderManager';
 import { AppHeader } from '@/components/layout/AppHeader';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { FloatingToolbar } from '@/components/editor/Toolbar';
 import { useEditorStore } from '@/store/editorStore';
 import { useUploadStore } from '@/store/uploadStore';
 import { useUIStore } from '@/store/uiStore';
@@ -25,7 +25,8 @@ import {
   BorderOutlined,
   UndoOutlined,
   RedoOutlined,
-  AppstoreOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons';
 
 function MobileToolPanel() {
@@ -171,7 +172,7 @@ function MobileToolPanel() {
               transition: 'all 0.2s ease',
             }}
           >
-            <AppstoreOutlined />
+            {showGrid ? <EyeOutlined /> : <EyeInvisibleOutlined />}
           </button>
         </Tooltip>
       </div>
@@ -406,7 +407,7 @@ export function EditorPage() {
             background: 'var(--color-bg-secondary)',
           }}
         >
-          <AppHeader />
+          <AppHeader onSettingsClick={() => setShowSettingsModal(true)} />
 
           <div
             style={{
@@ -415,8 +416,6 @@ export function EditorPage() {
               overflow: 'hidden',
             }}
           >
-            <Sidebar onSettingsClick={() => setShowSettingsModal(true)} />
-
             <main
               style={{
                 flex: 1,
@@ -430,6 +429,7 @@ export function EditorPage() {
                   flex: 1,
                   display: 'flex',
                   overflow: 'hidden',
+                  position: 'relative',
                 }}
               >
                 <div
@@ -443,6 +443,7 @@ export function EditorPage() {
                   }}
                 >
                   <EditorCanvas showGrid={showGrid} gridColor={gridColor} />
+                  {!isMobile && <FloatingToolbar position="top-left" />}
                 </div>
 
                 {showColorPalette && !isMobile && (

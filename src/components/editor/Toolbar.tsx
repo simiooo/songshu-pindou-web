@@ -1,77 +1,267 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import { useEditorStore } from '@/store/editorStore';
 import type { EditorTool } from '@/types/editor';
+import {
+  EditOutlined,
+  DeleteOutlined,
+  BgColorsOutlined,
+  BorderOutlined,
+  UndoOutlined,
+  RedoOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  ReloadOutlined,
+  ExpandOutlined,
+  ShrinkOutlined,
+} from '@ant-design/icons';
 
-interface Tool {
-  key: EditorTool;
-  icon: string;
-  label: string;
-  shortcut: string;
+interface FloatingToolbarProps {
+  position?: 'top-left' | 'top-right';
 }
 
-const tools: Tool[] = [
-  { key: 'brush', icon: '🖌️', label: '画笔', shortcut: 'B' },
-  { key: 'eraser', icon: '🧽', label: '橡皮擦', shortcut: 'E' },
-  { key: 'fill', icon: '🪣', label: '填充', shortcut: 'F' },
-  { key: 'selection', icon: '⬚', label: '选择', shortcut: 'S' },
-];
+interface ToolButtonProps {
+  icon: React.ReactNode;
+  tooltip: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  active?: boolean;
+}
 
-export function Toolbar() {
-  const { currentTool, setTool, showGrid, toggleGrid } = useEditorStore();
+function ToolButton({ icon, tooltip, onClick, disabled, active }: ToolButtonProps) {
+  return (
+    <Tooltip title={tooltip}>
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        style={{
+          width: 36,
+          height: 36,
+          border: 'none',
+          borderRadius: 'var(--radius-sm)',
+          background: active ? 'var(--color-primary-bg)' : 'transparent',
+          color: active
+            ? 'var(--color-primary)'
+            : disabled
+              ? 'var(--color-text-secondary)'
+              : 'var(--color-text)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 14,
+          transition: 'all 0.15s ease',
+          padding: 0,
+        }}
+      >
+        {icon}
+      </button>
+    </Tooltip>
+  );
+}
+
+function Divider() {
+  return (
+    <div
+      style={{
+        width: 1,
+        height: 24,
+        background: 'var(--color-border-light)',
+        margin: '0 var(--space-xs)',
+      }}
+    />
+  );
+}
+
+export function FloatingToolbar({ position = 'top-left' }: FloatingToolbarProps) {
+  const { t } = useTranslation();
+  const [compact, setCompact] = useState(false);
+
+  const {
+    currentTool,
+    setTool,
+    showGrid,
+    toggleGrid,
+    undo,
+    redo,
+    historyStack,
+    redoStack,
+    zoomLevel,
+    setZoomLevel,
+    resetView,
+  } = useEditorStore();
+
+  const tools: {
+    key: EditorTool;
+    icon: React.ReactNode;
+    label: string;
+    shortcut: string;
+    hint?: string;
+  }[] = [
+    {
+      key: 'brush',
+      icon: <EditOutlined />,
+      label: t('editor.brush'),
+      shortcut: t('shortcuts.brush'),
+    },
+    {
+      key: 'eraser',
+      icon: <DeleteOutlined />,
+      label: t('editor.eraser'),
+      shortcut: t('shortcuts.eraser'),
+    },
+    {
+      key: 'fill',
+      icon: <BgColorsOutlined />,
+      label: t('editor.fill'),
+      shortcut: t('shortcuts.fill'),
+    },
+    {
+      key: 'selection',
+      icon: <BorderOutlined />,
+      label: t('editor.selection'),
+      shortcut: t('shortcuts.selection'),
+      hint: t('editor.selectionHint'),
+    },
+  ];
+
+  const canUndo = historyStack.length > 0;
+  const canRedo = redoStack.length > 0;
+
+  const handleZoomIn = () => {
+    setZoomLevel(Math.min(zoomLevel * 1.2, 5));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(Math.max(zoomLevel * 0.8, 0.5));
+  };
+
+  const positionStyles: Record<typeof position, React.CSSProperties> = {
+    'top-left': {
+      top: 16,
+      left: 16,
+    },
+    'top-right': {
+      top: 16,
+      right: 16,
+    },
+  };
 
   return (
-    <div>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>工具</div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {tools.map((tool) => (
-            <Tooltip key={tool.key} title={`${tool.label} (${tool.shortcut})`}>
-              <button
-                onClick={() => setTool(tool.key)}
-                style={{
-                  width: 40,
-                  height: 40,
-                  border:
-                    currentTool === tool.key
-                      ? '2px solid #D4763B'
-                      : '1px solid #d9d9d9',
-                  borderRadius: 4,
-                  background: currentTool === tool.key ? '#FFF7ED' : '#fff',
-                  cursor: 'pointer',
-                  fontSize: 18,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {tool.icon}
-              </button>
-            </Tooltip>
-          ))}
-        </div>
-      </div>
+    <div
+      style={{
+        position: 'absolute',
+        ...positionStyles[position],
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-xs)',
+        padding: 'var(--space-xs)',
+        background: 'var(--color-bg)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-lg)',
+        border: '1px solid var(--color-border-light)',
+        zIndex: 50,
+      }}
+    >
+      {tools.map((tool) => (
+        <ToolButton
+          key={tool.key}
+          icon={tool.icon}
+          tooltip={
+            tool.hint
+              ? `${tool.label} (${tool.shortcut}) - ${tool.hint}`
+              : `${tool.label} (${tool.shortcut})`
+          }
+          onClick={() => setTool(tool.key)}
+          active={currentTool === tool.key}
+        />
+      ))}
 
-      <div>
-        <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>视图</div>
-        <Tooltip title="切换网格 (G)">
-          <button
-            onClick={toggleGrid}
+      <Divider />
+
+      <ToolButton
+        icon={<UndoOutlined />}
+        tooltip={`${t('editor.undo')} (${t('shortcuts.undo')})`}
+        onClick={undo}
+        disabled={!canUndo}
+      />
+      <ToolButton
+        icon={<RedoOutlined />}
+        tooltip={`${t('editor.redo')} (${t('shortcuts.redo')})`}
+        onClick={redo}
+        disabled={!canRedo}
+      />
+
+      {!compact && (
+        <>
+          <Divider />
+
+          <ToolButton
+            icon={<ZoomOutOutlined />}
+            tooltip={t('pixelation.scrollZoom')}
+            onClick={handleZoomOut}
+          />
+          <span
             style={{
-              width: 40,
-              height: 40,
-              border: showGrid ? '2px solid #D4763B' : '1px solid #d9d9d9',
-              borderRadius: 4,
-              background: showGrid ? '#FFF7ED' : '#fff',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: 500,
+              minWidth: 44,
+              textAlign: 'center',
+              fontSize: 12,
+              color: 'var(--color-text-secondary)',
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
-            格
-          </button>
-        </Tooltip>
-      </div>
+            {(zoomLevel * 100).toFixed(0)}%
+          </span>
+          <ToolButton
+            icon={<ZoomInOutlined />}
+            tooltip={t('pixelation.scrollZoom')}
+            onClick={handleZoomIn}
+          />
+          <ToolButton
+            icon={<ReloadOutlined />}
+            tooltip={t('editor.resetView')}
+            onClick={resetView}
+          />
+
+          <Divider />
+
+          <ToolButton
+            icon={showGrid ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+            tooltip={`${t('editor.toggleGrid')} (${t('shortcuts.grid')})`}
+            onClick={toggleGrid}
+            active={showGrid}
+          />
+        </>
+      )}
+
+      <Divider />
+
+      <Tooltip title={compact ? t('common.expand') : t('common.collapse')}>
+        <button
+          onClick={() => setCompact(!compact)}
+          style={{
+            width: 36,
+            height: 36,
+            border: 'none',
+            borderRadius: 'var(--radius-sm)',
+            background: 'transparent',
+            color: 'var(--color-text-secondary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 14,
+            transition: 'all 0.15s ease',
+            padding: 0,
+          }}
+        >
+          {compact ? <ExpandOutlined /> : <ShrinkOutlined />}
+        </button>
+      </Tooltip>
     </div>
   );
 }
