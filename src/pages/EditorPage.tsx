@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space, Tooltip } from 'antd';
+import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space, Tooltip, Drawer } from 'antd';
 import type { MenuProps } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
@@ -584,10 +584,10 @@ export function EditorPage() {
                 }}
               >
                 <Button
-                  onClick={() => setShowColorPalette(!showColorPalette)}
+                  onClick={() => setShowColorPalette(true)}
                   style={{ flex: 1, height: 50, fontSize: 15 }}
                 >
-                  {showColorPalette ? t('editor.tools') : t('color.palette')}
+                  {t('editor.tools')}
                 </Button>
                 <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
                   <Button icon={<UploadOutlined />} style={{ flex: 1, height: 50, fontSize: 15 }}>
@@ -596,45 +596,20 @@ export function EditorPage() {
                 </Dropdown>
               </div>
 
-              {showColorPalette && (
-                <div
-                  style={{
-                    position: 'fixed',
-                    bottom: 66,
-                    left: 0,
-                    right: 0,
-                    maxHeight: '60vh',
-                    background: 'var(--color-bg)',
-                    borderTopLeftRadius: 'var(--radius-lg)',
-                    borderTopRightRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-lg)',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    zIndex: 99,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 36,
-                      height: 5,
-                      background: 'var(--color-border)',
-                      borderRadius: 2.5,
-                      margin: '10px auto',
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div
-                    style={{
-                      flex: 1,
-                      overflow: 'auto',
-                      padding: 'var(--space-md)',
-                    }}
-                  >
-                    <MobileToolPanel />
-                  </div>
-                </div>
-              )}
+              <Drawer
+                title={t('editor.tools')}
+                placement="bottom"
+                onClose={() => setShowColorPalette(false)}
+                open={showColorPalette}
+                height="60vh"
+                styles={{
+                  body: { padding: 'var(--space-md)', overflow: 'auto' },
+                  header: { borderBottom: '1px solid var(--color-border-light)', padding: 'var(--space-sm) var(--space-md)' },
+                }}
+                closeIcon={null}
+              >
+                <MobileToolPanel />
+              </Drawer>
             </>
           )}
         </div>
