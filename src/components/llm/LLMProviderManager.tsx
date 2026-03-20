@@ -1,63 +1,24 @@
 import { useState } from 'react';
-import { Modal, Form, Input, Select, Switch, Button, Table, Popconfirm, message } from 'antd';
+import { Modal, Form, Input, Select, Switch, Button, Table, Popconfirm, message, Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useLLMProviderStore } from '@/store/llmProviderStore';
-import type { LLMProvider } from '@/types/editor';
+import {
+  type LLMProvider,
+  type ProviderType,
+  PROVIDER_CONFIGS,
+  getProviderConfig,
+  getModelsByProvider,
+} from '@/types/editor';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
-
-const PROVIDER_OPTIONS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'moonshot', label: 'Moonshot (Kimi)' },
-  { value: 'qwen', label: 'Qwen (通义)' },
-  { value: 'ollama', label: 'Ollama (本地)' },
-];
-
-const MODEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
-  openai: [
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  ],
-  anthropic: [
-    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-    { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
-    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
-  ],
-  google: [
-    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-  ],
-  deepseek: [
-    { value: 'deepseek-chat', label: 'DeepSeek Chat' },
-    { value: 'deepseek-coder', label: 'DeepSeek Coder' },
-  ],
-  moonshot: [
-    { value: 'moonshot-v1-8k', label: 'Moonshot V1 8K' },
-    { value: 'moonshot-v1-32k', label: 'Moonshot V1 32K' },
-    { value: 'moonshot-v1-128k', label: 'Moonshot V1 128K' },
-  ],
-  qwen: [
-    { value: 'qwen-turbo', label: 'Qwen Turbo' },
-    { value: 'qwen-plus', label: 'Qwen Plus' },
-    { value: 'qwen-max', label: 'Qwen Max' },
-  ],
-  ollama: [
-    { value: 'llama3', label: 'Llama 3' },
-    { value: 'llama3.1', label: 'Llama 3.1' },
-    { value: 'mistral', label: 'Mistral' },
-    { value: 'codellama', label: 'Code Llama' },
-  ],
-};
 
 export function LLMProviderManager() {
   const { t } = useTranslation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<LLMProvider | null>(null);
   const [form] = Form.useForm();
-  const [selectedProvider, setSelectedProvider] = useState<string>('openai');
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>('openai');
+  const [customModels, setCustomModels] = useState<string[]>([]);
+  const [customModelInput, setCustomModelInput] = useState('');
 
   const {
     providers,
@@ -66,17 +27,48 @@ export function LLMProviderManager() {
     deleteProvider,
   } = useLLMProviderStore();
 
+  const providerOptions = PROVIDER_CONFIGS.map((p) => ({
+    value: p.value,
+    label: p.label,
+  }));
+
+  const currentModels = getModelsByProvider(selectedProvider);
+  const currentConfig = getProviderConfig(selectedProvider);
+  const showCustomModelInput = selectedProvider === 'custom' || currentModels.length === 0;
+
   const handleAdd = () => {
     setEditingProvider(null);
     form.resetFields();
     setSelectedProvider('openai');
+    setCustomModels([]);
+    setCustomModelInput('');
+    form.setFieldsValue({
+      enabled: true,
+      isDefault: false,
+    });
+    const defaultConfig = getProviderConfig('openai');
+    if (defaultConfig?.defaultBaseUrl) {
+      form.setFieldValue('baseUrl', defaultConfig.defaultBaseUrl);
+    }
     setIsModalOpen(true);
   };
 
   const handleEdit = (provider: LLMProvider) => {
     setEditingProvider(provider);
-    form.setFieldsValue(provider);
     setSelectedProvider(provider.provider);
+    const config = getProviderConfig(provider.provider);
+    if (provider.provider === 'custom' || !config?.models.length) {
+      const savedCustomModels = provider.model.split(',').map((m) => m.trim()).filter(Boolean);
+      setCustomModels(savedCustomModels);
+    } else {
+      setCustomModels([]);
+    }
+    form.setFieldsValue(provider);
+    if (config?.defaultBaseUrl && !provider.baseUrl) {
+      form.setFieldValue('baseUrl', config.defaultBaseUrl);
+    } else {
+      form.setFieldValue('baseUrl', provider.baseUrl);
+    }
     setIsModalOpen(true);
   };
 
@@ -88,8 +80,19 @@ export function LLMProviderManager() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      let model = values.model;
+
+      if (selectedProvider === 'custom') {
+        const allModels = [...customModels];
+        if (values.customModel?.trim()) {
+          allModels.push(values.customModel.trim());
+        }
+        model = allModels.join(',');
+      }
+
       const providerData = {
         ...values,
+        model,
         enabled: values.enabled ?? true,
         isDefault: values.isDefault ?? false,
       };
@@ -119,6 +122,32 @@ export function LLMProviderManager() {
     message.success(t('llm.setAsDefault'));
   };
 
+  const handleProviderChange = (value: ProviderType) => {
+    setSelectedProvider(value);
+    setCustomModels([]);
+    form.setFieldValue('model', undefined);
+    const config = getProviderConfig(value);
+    if (config?.defaultBaseUrl) {
+      form.setFieldValue('baseUrl', config.defaultBaseUrl);
+    }
+  };
+
+  const handleAddCustomModel = () => {
+    if (customModelInput.trim() && !customModels.includes(customModelInput.trim())) {
+      setCustomModels([...customModels, customModelInput.trim()]);
+      setCustomModelInput('');
+    }
+  };
+
+  const handleRemoveCustomModel = (model: string) => {
+    setCustomModels(customModels.filter((m) => m !== model));
+  };
+
+  const getProviderLabel = (providerType: ProviderType) => {
+    const config = getProviderConfig(providerType);
+    return config?.label ?? providerType;
+  };
+
   const columns = [
     {
       title: t('llm.name'),
@@ -129,15 +158,29 @@ export function LLMProviderManager() {
       title: t('llm.provider'),
       dataIndex: 'provider',
       key: 'provider',
-      render: (provider: string) => {
-        const option = PROVIDER_OPTIONS.find((p) => p.value === provider);
-        return option?.label || provider;
-      },
+      render: (provider: ProviderType) => (
+        <Tag color="blue">{getProviderLabel(provider)}</Tag>
+      ),
     },
     {
       title: t('llm.model'),
       dataIndex: 'model',
       key: 'model',
+      render: (model: string, record: LLMProvider) => {
+        const config = getProviderConfig(record.provider);
+        const modelList = model.split(',').map((m) => m.trim()).filter(Boolean);
+        const labels = modelList.map((m) => {
+          const found = config?.models.find((cm) => cm.value === m);
+          return found?.label ?? m;
+        });
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {labels.map((label, i) => (
+              <Tag key={i} style={{ margin: 0 }}>{label}</Tag>
+            ))}
+          </div>
+        );
+      },
     },
     {
       title: t('llm.enabled'),
@@ -228,6 +271,7 @@ export function LLMProviderManager() {
         onCancel={() => setIsModalOpen(false)}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
+        width={520}
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -245,31 +289,75 @@ export function LLMProviderManager() {
           >
             <Select
               placeholder={`Select ${t('llm.provider').toLowerCase()}`}
-              options={PROVIDER_OPTIONS}
-              onChange={(value) => {
-                setSelectedProvider(value);
-                form.setFieldValue('model', MODEL_OPTIONS[value]?.[0]?.value);
-              }}
+              options={providerOptions}
+              value={selectedProvider}
+              onChange={handleProviderChange}
             />
           </Form.Item>
 
-          <Form.Item
-            name="model"
-            label={t('llm.model')}
-            rules={[{ required: true, message: `Please select a ${t('llm.model').toLowerCase()}` }]}
-          >
-            <Select
-              placeholder={`Select ${t('llm.model').toLowerCase()}`}
-              options={MODEL_OPTIONS[selectedProvider] || []}
-            />
-          </Form.Item>
+          {showCustomModelInput ? (
+            <>
+              <Form.Item label={t('llm.model')}>
+                <div style={{ marginBottom: 8 }}>
+                  {customModels.map((model) => (
+                    <Tag
+                      key={model}
+                      closable
+                      onClose={() => handleRemoveCustomModel(model)}
+                      style={{ marginBottom: 4 }}
+                    >
+                      {model}
+                    </Tag>
+                  ))}
+                </div>
+                <Input
+                  placeholder="Enter model name and press Add"
+                  value={customModelInput}
+                  onChange={(e) => setCustomModelInput(e.target.value)}
+                  onPressEnter={handleAddCustomModel}
+                  addonAfter={
+                    <Button type="link" size="small" onClick={handleAddCustomModel} style={{ padding: 0 }}>
+                      Add
+                    </Button>
+                  }
+                />
+              </Form.Item>
+              <Form.Item
+                name="model"
+                hidden
+              >
+                <Input />
+              </Form.Item>
+              <Form.Item
+                name="customModel"
+                hidden
+              >
+                <Input />
+              </Form.Item>
+            </>
+          ) : (
+            <Form.Item
+              name="model"
+              label={t('llm.model')}
+              rules={[{ required: true, message: `Please select a ${t('llm.model').toLowerCase()}` }]}
+            >
+              <Select
+                placeholder={`Select ${t('llm.model').toLowerCase()}`}
+                options={currentModels.map((m) => ({ value: m.value, label: m.label }))}
+              />
+            </Form.Item>
+          )}
 
           <Form.Item name="apiKey" label={t('llm.apiKey')}>
             <Input.Password placeholder={`Enter ${t('llm.apiKey').toLowerCase()}`} />
           </Form.Item>
 
-          <Form.Item name="baseUrl" label={t('llm.customEndpoint')}>
-            <Input placeholder="e.g., https://api.openai.com/v1" />
+          <Form.Item
+            name="baseUrl"
+            label={t('llm.customEndpoint')}
+            extra={currentConfig?.defaultBaseUrl ? `Default: ${currentConfig.defaultBaseUrl}` : undefined}
+          >
+            <Input placeholder={currentConfig?.supportsCustomBaseUrl ? 'https://api.example.com/v1' : 'Not configurable'} />
           </Form.Item>
 
           <Form.Item name="enabled" label={t('llm.enabled')} valuePropName="checked" initialValue={true}>
@@ -278,6 +366,49 @@ export function LLMProviderManager() {
 
           <Form.Item name="isDefault" label={t('llm.setAsDefault')} valuePropName="checked" initialValue={false}>
             <Switch />
+          </Form.Item>
+
+          <Form.Item
+            name="maxContextWindow"
+            label={t('llm.maxContextWindow')}
+          >
+            <Input type="number" placeholder="e.g., 128000" />
+          </Form.Item>
+
+          <Form.Item
+            name="maxTokens"
+            label={t('llm.maxTokens')}
+          >
+            <Input type="number" placeholder="e.g., 4096" />
+          </Form.Item>
+
+          <Form.Item
+            name="temperature"
+            label={t('llm.temperature')}
+          >
+            <Input type="number" placeholder="e.g., 0.7" step="0.1" />
+          </Form.Item>
+
+          <Form.Item
+            name="topP"
+            label={t('llm.topP')}
+          >
+            <Input type="number" placeholder="e.g., 0.9" step="0.1" />
+          </Form.Item>
+
+          <Form.Item
+            name="reasoningLevel"
+            label={t('llm.reasoningLevel')}
+          >
+            <Select
+              placeholder={t('llm.reasoningLevelPlaceholder')}
+              options={[
+                { value: '', label: t('llm.notUseReasoning') },
+                { value: 'low', label: t('llm.reasoningLow') },
+                { value: 'medium', label: t('llm.reasoningMedium') },
+                { value: 'high', label: t('llm.reasoningHigh') },
+              ]}
+            />
           </Form.Item>
         </Form>
       </Modal>

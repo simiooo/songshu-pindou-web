@@ -1,11 +1,60 @@
 import type { LLMProvider } from '@/types/editor';
 import { useLLMProviderStore } from '@/store/llmProviderStore';
 import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
 
 export interface LLMProcessResult {
   success: boolean;
   result?: string;
   error?: string;
+}
+
+async function createModelForProvider(provider: LLMProvider) {
+  const { provider: providerType, model, apiKey, baseUrl } = provider;
+
+  switch (providerType) {
+    case 'openai': {
+      const openai = createOpenAI({
+        apiKey,
+        baseURL: baseUrl,
+      });
+      return openai(model);
+    }
+
+    case 'anthropic': {
+      const { createAnthropic } = await import('@ai-sdk/anthropic');
+      const anthropic = createAnthropic({
+        apiKey,
+        baseURL: baseUrl,
+      });
+      return anthropic(model);
+    }
+
+    case 'google': {
+      const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
+      const google = createGoogleGenerativeAI({
+        apiKey,
+      });
+      return google(model);
+    }
+
+    case 'deepseek':
+    case 'moonshot':
+    case 'qwen':
+    case 'glm':
+    case 'minimax':
+    case 'ollama':
+    case 'custom': {
+      const openaiCompatible = createOpenAI({
+        apiKey,
+        baseURL: baseUrl,
+      });
+      return openaiCompatible(model);
+    }
+
+    default:
+      throw new Error(`不支持的 Provider: ${providerType}`);
+  }
 }
 
 export async function processWithLLM(
@@ -21,45 +70,9 @@ export async function processWithLLM(
   }
 
   try {
-    let model;
+    const model = await createModelForProvider(provider);
 
-    switch (provider.provider) {
-      case 'openai': {
-        const { createOpenAI } = await import('@ai-sdk/openai');
-        const openai = createOpenAI({
-          apiKey: provider.apiKey,
-          baseURL: provider.baseUrl,
-        });
-        model = openai(provider.model);
-        break;
-      }
-
-      case 'anthropic': {
-        const { createAnthropic } = await import('@ai-sdk/anthropic');
-        const anthropic = createAnthropic({
-          apiKey: provider.apiKey,
-        });
-        model = anthropic(provider.model);
-        break;
-      }
-
-      case 'google': {
-        const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
-        const google = createGoogleGenerativeAI({
-          apiKey: provider.apiKey,
-        });
-        model = google(provider.model);
-        break;
-      }
-
-      default:
-        return {
-          success: false,
-          error: `不支持的 Provider: ${provider.provider}`,
-        };
-    }
-
-    const result = await generateText({
+    const generateOptions: Record<string, unknown> = {
       model,
       messages: [
         {
@@ -76,7 +89,33 @@ export async function processWithLLM(
           ],
         },
       ],
-    });
+    };
+
+    if (provider.maxTokens) {
+      generateOptions.maxOutputTokens = provider.maxTokens;
+    }
+
+    if (provider.temperature !== undefined) {
+      generateOptions.temperature = provider.temperature;
+    }
+
+    if (provider.topP !== undefined) {
+      generateOptions.topP = provider.topP;
+    }
+
+    if (provider.reasoningLevel) {
+      const reasoningBudgetMap: Record<string, number> = {
+        low: 1024,
+        medium: 4096,
+        high: 8192,
+      };
+      const budget = reasoningBudgetMap[provider.reasoningLevel];
+      if (budget) {
+        generateOptions.thinking = { type: 'enabled', budget };
+      }
+    }
+
+    const result = await generateText(generateOptions as Parameters<typeof generateText>[0]);
 
     return {
       success: true,
