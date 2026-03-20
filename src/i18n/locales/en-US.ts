@@ -1,7 +1,7 @@
 export default {
   app: {
-    name: 'Perler Beads Editor',
-    subtitle: 'Create pixel art with fuse beads',
+    name: 'Squirrel Beads',
+    subtitle: 'Cute perler bead pattern editor',
   },
   common: {
     save: 'Save',
@@ -108,6 +108,16 @@ export default {
     json: 'JSON (Project File)',
     exportSuccess: 'Saved successfully',
     exportFailed: 'Failed to save',
+    exportModalTitle: 'Select Export Options',
+    exportPattern: 'Pattern Image',
+    exportPatternDesc: 'Grid pattern for following while beading',
+    exportColorCodes: 'Color Codes Image',
+    exportColorCodesDesc: 'Shows color codes for each area',
+    exportMaterials: 'Materials List',
+    exportMaterialsDesc: 'Bead count for shopping reference',
+    exporting: 'Exporting...',
+    selectAtLeastOne: 'Please select at least one item',
+    zipFileName: 'Perler Beads Pattern',
   },
   save: {
     unsaved: 'Unsaved',

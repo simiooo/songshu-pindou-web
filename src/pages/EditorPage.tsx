@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { ConfigProvider, App as AntdApp, Button, Modal, Dropdown, message, Space, Tooltip, Drawer, Upload } from 'antd';
-import type { MenuProps } from 'antd';
+import { ConfigProvider, App as AntdApp, Button, Modal, message, Space, Tooltip, Drawer, Upload } from 'antd';
 import type { RcFile } from 'antd/es/upload';
 import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
@@ -13,7 +12,7 @@ import { useEditorStore } from '@/store/editorStore';
 import { useUploadStore } from '@/store/uploadStore';
 import { useUIStore } from '@/store/uiStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
-import { exportToPNG, exportToJSON, downloadFile, downloadImage } from '@/utils/exportUtils';
+import { ExportModal } from '@/components/editor/ExportModal';
 import { getTheme } from '@/theme';
 import { CANVAS_SIZES } from '@/constants/colorGroups';
 import type { CanvasData, CanvasSize, EditorTool } from '@/types/editor';
@@ -350,6 +349,8 @@ export function EditorPage() {
     canvasSize,
     projectName,
     loadCanvas,
+    colorGroups,
+    activeColorGroupId,
   } = useEditorStore();
 
   const { status, importedImage, reset: resetUpload, setImportedImage, setStatus: setUploadStatus } = useUploadStore();
@@ -357,10 +358,15 @@ export function EditorPage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showColorPalette, setShowColorPalette] = useState(true);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const hasImage = useMemo(() => {
     return canvasData.some((row) => row.some((pixel) => pixel.filled));
   }, [canvasData]);
+
+  const activeColorGroup = useMemo(() => {
+    return colorGroups.find((g) => g.id === activeColorGroupId) || colorGroups[0];
+  }, [colorGroups, activeColorGroupId]);
 
   const handleFileUpload = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -415,60 +421,6 @@ export function EditorPage() {
   }, [resetUpload]);
 
   const showPixelationModal = status === 'ready' && importedImage !== null;
-
-  const handleExportPNG = useCallback((pixelSize: number) => {
-    try {
-      const dataUrl = exportToPNG({
-        canvasData,
-        canvasSize,
-        pixelSize,
-        backgroundColor: '#FFFFFF',
-      });
-      downloadImage(dataUrl, `${projectName}_${canvasSize}x${canvasSize}.png`);
-      message.success(t('export.exportSuccess'));
-    } catch {
-      message.error(t('export.exportFailed'));
-    }
-  }, [canvasData, canvasSize, projectName, t]);
-
-  const handleExportJSON = useCallback(() => {
-    try {
-      const json = exportToJSON(canvasData, canvasSize, projectName);
-      downloadFile(json, `${projectName}.json`, 'application/json');
-      message.success(t('export.exportSuccess'));
-    } catch {
-      message.error(t('export.exportFailed'));
-    }
-  }, [canvasData, canvasSize, projectName, t]);
-
-  const exportMenuItems: MenuProps['items'] = [
-    {
-      key: 'png-1x',
-      label: t('export.png1x'),
-      onClick: () => handleExportPNG(1),
-    },
-    {
-      key: 'png-2x',
-      label: t('export.png2x'),
-      onClick: () => handleExportPNG(2),
-    },
-    {
-      key: 'png-4x',
-      label: t('export.png4x'),
-      onClick: () => handleExportPNG(4),
-    },
-    {
-      key: 'png-8x',
-      label: t('export.png8x'),
-      onClick: () => handleExportPNG(8),
-    },
-    { type: 'divider' },
-    {
-      key: 'json',
-      label: t('export.json'),
-      onClick: handleExportJSON,
-    },
-  ];
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -646,11 +598,13 @@ export function EditorPage() {
                       }}
                     >
                       <Space direction="vertical" style={{ width: '100%' }} size="small">
-                        <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
-                          <Button style={{ width: '100%' }} icon={<UploadOutlined />}>
-                            {t('export.exportProject')}
-                          </Button>
-                        </Dropdown>
+                        <Button
+                          style={{ width: '100%' }}
+                          icon={<UploadOutlined />}
+                          onClick={() => setShowExportModal(true)}
+                        >
+                          {t('export.exportProject')}
+                        </Button>
                       </Space>
                     </div>
                   </aside>
@@ -682,11 +636,13 @@ export function EditorPage() {
                 >
                   {t('editor.tools')}
                 </Button>
-                <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
-                  <Button icon={<UploadOutlined />} style={{ flex: 1, height: 50, fontSize: 15 }}>
-                    {t('export.exportProject')}
-                  </Button>
-                </Dropdown>
+                <Button
+                  icon={<UploadOutlined />}
+                  style={{ flex: 1, height: 50, fontSize: 15 }}
+                  onClick={() => setShowExportModal(true)}
+                >
+                  {t('export.exportProject')}
+                </Button>
               </div>
 
               <Drawer
@@ -720,6 +676,15 @@ export function EditorPage() {
           imageHeight={importedImage?.height || 0}
           onConfirm={handlePixelationConfirm}
           onCancel={handlePixelationCancel}
+        />
+
+        <ExportModal
+          open={showExportModal}
+          canvasData={canvasData}
+          canvasSize={canvasSize}
+          projectName={projectName}
+          colorGroup={activeColorGroup}
+          onClose={() => setShowExportModal(false)}
         />
 
         <Modal

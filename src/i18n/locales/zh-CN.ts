@@ -1,7 +1,7 @@
 export default {
   app: {
-    name: '拼豆编辑器',
-    subtitle: 'Perler Beads Editor',
+    name: '松鼠拼豆',
+    subtitle: '可爱的拼豆图案编辑器',
   },
   common: {
     save: '保存',
@@ -108,6 +108,16 @@ export default {
     json: 'JSON (项目文件)',
     exportSuccess: '保存成功',
     exportFailed: '保存失败',
+    exportModalTitle: '选择导出内容',
+    exportPattern: '像素图纸',
+    exportPatternDesc: '带网格线的像素图，方便对照制作',
+    exportColorCodes: '色号标注图',
+    exportColorCodesDesc: '标注每个区域的色号，方便选色',
+    exportMaterials: '材料清单',
+    exportMaterialsDesc: '显示所需颗粒数量，可直接用于购买材料',
+    exporting: '正在导出...',
+    selectAtLeastOne: '请至少选择一项',
+    zipFileName: '拼豆像素图',
   },
   save: {
     unsaved: '未保存',
