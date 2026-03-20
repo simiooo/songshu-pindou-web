@@ -15,6 +15,7 @@
     "@ai-sdk/openai": "^3.0.41",
     "@ai-sdk/provider-utils": "^4.0.19",
     "@ant-design/icons": "~6.1.0",
+    "@vercel/analytics": "^2.0.1",
     "ahooks": "latest",
     "ai": "^6.0.116",
     "antd": "latest",
