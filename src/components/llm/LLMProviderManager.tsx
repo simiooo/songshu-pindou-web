@@ -74,8 +74,8 @@ export function LLMProviderManager() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    deleteProvider(id);
+  const handleDelete = async (id: string) => {
+    await deleteProvider(id);
     message.success(t('common.delete') + ' ' + t('llm.provider'));
   };
 
@@ -101,15 +101,15 @@ export function LLMProviderManager() {
       };
 
       if (editingProvider) {
-        updateProvider(editingProvider.id, providerData);
+        await updateProvider(editingProvider.id, providerData);
         if (providerData.isImageProcessor) {
-          setImageProcessor(editingProvider.id);
+          await setImageProcessor(editingProvider.id);
         }
         message.success(t('common.edit') + ' ' + t('llm.provider'));
       } else {
-        const newProvider = addProvider(providerData);
+        const newProvider = await addProvider(providerData);
         if (providerData.isImageProcessor) {
-          setImageProcessor(newProvider.id);
+          await setImageProcessor(newProvider.id);
         }
         message.success(t('common.add') + ' ' + t('llm.provider'));
       }
@@ -131,8 +131,8 @@ export function LLMProviderManager() {
     message.success(t('llm.setAsDefault'));
   };
 
-  const handleSetImageProcessor = (id: string) => {
-    setImageProcessor(id);
+  const handleSetImageProcessor = async (id: string) => {
+    await setImageProcessor(id);
     message.success(t('llm.setAsImageProcessor'));
   };
 

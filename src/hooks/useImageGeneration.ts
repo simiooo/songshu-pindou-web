@@ -6,7 +6,6 @@ export interface ImageGenerationParams {
   imageUrl?: string;
   size?: string;
   responseFormat?: 'url' | 'b64_json';
-  useBase64InPrompt?: boolean; // 优先使用 base64 方式
   additionalParams?: Record<string, unknown>; // 额外参数如 watermark, stream, sequential_image_generation 等
 }
 
@@ -44,37 +43,68 @@ export const PERLER_BEAD_PROMPT_TEMPLATE = `请将参考图片转换为拼豆（
 - 背景尽量简化或使用纯色
 - 整体风格活泼、卡通化但可辨认`;
 
-// 将图片 URL 转换为 base64
-async function imageUrlToBase64(imageUrl: string): Promise<string> {
-  try {
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        // 移除 data:image/xxx;base64, 前缀
-        const base64Data = base64.split(',')[1];
-        resolve(base64Data);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    throw new ImageGenerationError(
-      `Failed to convert image to base64: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+// uguu.se 上传响应接口
+interface UguuUploadResponse {
+  success: boolean;
+  files?: Array<{
+    name: string;
+    url: string;
+    size: number;
+  }>;
+  error?: string;
 }
 
-// 使用 XML 格式在 prompt 中嵌入 base64 图片（字节跳动格式）
-function buildPromptWithBase64Image(prompt: string, base64Image: string, mimeType = 'image/png'): string {
-  return `${prompt}
+// 上传图片到 uguu.se 获取临时 URL
+async function uploadImageToUguu(imageUrl: string): Promise<string> {
+  try {
+    // 获取图片 blob 数据
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
 
-<image>
-<mime_type>${mimeType}</mime_type>
-<data>${base64Image}</data>
-</image>`;
+    const blob = await response.blob();
+
+    if (blob.size === 0) {
+      throw new Error('Image blob is empty');
+    }
+
+    // 构建 FormData
+    const formData = new FormData();
+    const ext = blob.type.includes('png') ? 'png' : 'jpg';
+    const filename = `image.${ext}`;
+
+    // uguu.se 使用 files[] 数组字段名
+    formData.append('files[]', blob, filename);
+
+    // 上传到 uguu.se（通过代理）
+    const uploadResponse = await fetch('/api/upload?output=json', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text().catch(() => 'Unknown error');
+      throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
+    }
+
+    // 解析 JSON 响应
+    const data = (await uploadResponse.json()) as UguuUploadResponse;
+
+    if (!data.success) {
+      throw new Error(`Upload failed: ${data.error || 'Unknown error'}`);
+    }
+
+    if (!data.files || data.files.length === 0 || !data.files[0].url) {
+      throw new Error(`Invalid upload response: missing file URL`);
+    }
+
+    return data.files[0].url;
+  } catch (error) {
+    throw new ImageGenerationError(
+      `Failed to upload image: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 // 检测是否是字节跳动/火山引擎 API
@@ -116,10 +146,10 @@ function getClosestAspectRatio(width: number, height: number): string {
     { key: '3:2', value: 1.5 },
     { key: '2:3', value: 0.667 },
   ];
-  
+
   let closest = ratios[0];
   let minDiff = Math.abs(ratio - closest.value);
-  
+
   for (const r of ratios) {
     const diff = Math.abs(ratio - r.value);
     if (diff < minDiff) {
@@ -127,7 +157,7 @@ function getClosestAspectRatio(width: number, height: number): string {
       closest = r;
     }
   }
-  
+
   return closest.key;
 }
 
@@ -138,7 +168,7 @@ export function calculateImageSize(
   isVolces: boolean
 ): string {
   const aspectRatio = getClosestAspectRatio(originalWidth, originalHeight);
-  
+
   if (isVolces) {
     // 字节跳动 API - 使用 2K 分辨率推荐尺寸
     return VOLCES_2K_SIZES[aspectRatio as keyof typeof VOLCES_2K_SIZES] || '2048x2048';
@@ -153,7 +183,7 @@ async function generateImageWithProvider(
   params: ImageGenerationParams
 ): Promise<ImageGenerationResult> {
   const { provider: providerType, model, apiKey, baseUrl } = provider;
-  
+
   if (!apiKey) {
     throw new ImageGenerationError('API key is required for image generation');
   }
@@ -161,46 +191,33 @@ async function generateImageWithProvider(
   const url = baseUrl || getDefaultBaseUrl(providerType);
   // 检测是否是字节跳动 API：通过 providerType 或 baseUrl 判断
   const isVolces = providerType === 'volces' || isVolcesAPI(url);
-  
-  // 优先处理 base64 方式
-  let finalPrompt = params.prompt;
+
+  // 如果有图片，先上传到 uguu.se 获取临时 URL
   let imageUrlForApi: string | undefined;
-  
+
   if (params.imageUrl) {
-    if (params.useBase64InPrompt !== false) {
-      // 默认使用 base64 方式（除非明确设置为 false）
-      try {
-        const base64Image = await imageUrlToBase64(params.imageUrl);
-        // 尝试从 URL 推断 mime type
-        const mimeType = params.imageUrl.endsWith('.png') 
-          ? 'image/png' 
-          : params.imageUrl.endsWith('.jpg') || params.imageUrl.endsWith('.jpeg')
-            ? 'image/jpeg'
-            : 'image/png';
-        finalPrompt = buildPromptWithBase64Image(params.prompt, base64Image, mimeType);
-      } catch {
-        // 如果 base64 转换失败，回退到 URL 方式
-        imageUrlForApi = params.imageUrl;
-      }
-    } else {
-      // 明确使用 URL 方式
-      imageUrlForApi = params.imageUrl;
+    try {
+      imageUrlForApi = await uploadImageToUguu(params.imageUrl);
+    } catch (error) {
+      throw new ImageGenerationError(
+        `Failed to upload image for processing: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
-  
+
   // 字节跳动 API 使用 OpenAI 兼容模式
   if (isVolces || providerType === 'custom' || providerType === 'moonshot' || providerType === 'qwen') {
     return generateWithOpenAICompatible(url, apiKey, model, {
       ...params,
-      prompt: finalPrompt,
+      prompt: params.prompt,
       imageUrl: imageUrlForApi,
     }, isVolces);
   }
-  
+
   // OpenAI 原生 API
   return generateWithOpenAI(url, apiKey, model, {
     ...params,
-    prompt: finalPrompt,
+    prompt: params.prompt,
     imageUrl: imageUrlForApi,
   });
 }
@@ -263,19 +280,19 @@ async function generateWithOpenAI(
   }
 
   const data = await response.json();
-  
+
   if (!data.data || !data.data[0]) {
     throw new ImageGenerationError('Invalid response from image generation API');
   }
 
   const result = data.data[0];
-  
+
   if (result.url) {
     return { imageUrl: result.url, revisedPrompt: result.revised_prompt };
   } else if (result.b64_json) {
     return { imageUrl: `data:image/png;base64,${result.b64_json}`, revisedPrompt: result.revised_prompt };
   }
-  
+
   throw new ImageGenerationError('No image data in response');
 }
 
@@ -335,7 +352,7 @@ async function generateWithOpenAICompatible(
   }
 
   const data = await response.json();
-  
+
   if (data.data && data.data[0]) {
     const result = data.data[0];
     if (result.url) {
@@ -344,11 +361,11 @@ async function generateWithOpenAICompatible(
       return { imageUrl: `data:image/png;base64,${result.b64_json}`, revisedPrompt: result.revised_prompt };
     }
   }
-  
+
   if (data.url) {
     return { imageUrl: data.url, revisedPrompt: data.revised_prompt };
   }
-  
+
   throw new ImageGenerationError('No image data in response');
 }
 
@@ -363,7 +380,7 @@ export function useImageGeneration() {
   ): Promise<ImageGenerationResult> => {
     setIsGenerating(true);
     setError(null);
-    
+
     try {
       const data = await generateImageWithProvider(provider, params);
       setResult(data);
@@ -385,4 +402,4 @@ export function useImageGeneration() {
   };
 }
 
-export { generateImageWithProvider, imageUrlToBase64, buildPromptWithBase64Image };
+export { generateImageWithProvider };

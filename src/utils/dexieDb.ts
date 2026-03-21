@@ -24,6 +24,11 @@ export interface LLMProviderRecord {
   enabled: boolean;
   isDefault: boolean;
   isImageProcessor: boolean;
+  reasoningLevel?: string;
+  maxTokens?: number;
+  maxContextWindow?: number;
+  temperature?: number;
+  topP?: number;
   createdAt: number;
   updatedAt: number;
 }

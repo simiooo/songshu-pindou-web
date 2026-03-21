@@ -79,7 +79,6 @@ export function ImageProcessingPreview({
         imageUrl,
         size,
         responseFormat: 'url',
-        useBase64InPrompt: true, // 优先使用 base64 方式
         additionalParams,
       });
       
@@ -110,66 +109,84 @@ export function ImageProcessingPreview({
     void performGeneration(prompt);
   }, [prompt, performGeneration]);
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback(async () => {
     if (!processedImageUrl) return;
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = pixelationCanvasSize;
-      canvas.height = pixelationCanvasSize;
-      const ctx = canvas.getContext('2d');
-
-      if (!ctx) {
-        message.error(t('upload.processingFailed'));
-        return;
+    try {
+      // 使用代理获取图片，避免 CORS 问题
+      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(processedImageUrl)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch image through proxy');
       }
 
-      // Draw image to fit the canvas size (maintaining aspect ratio)
-      const scale = Math.min(
-        pixelationCanvasSize / img.width,
-        pixelationCanvasSize / img.height
-      );
-      const x = (pixelationCanvasSize - img.width * scale) / 2;
-      const y = (pixelationCanvasSize - img.height * scale) / 2;
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, pixelationCanvasSize, pixelationCanvasSize);
-      ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = pixelationCanvasSize;
+        canvas.height = pixelationCanvasSize;
+        const ctx = canvas.getContext('2d');
 
-      // Get image data
-      const imageData = ctx.getImageData(0, 0, pixelationCanvasSize, pixelationCanvasSize);
-
-      // Convert to CanvasData
-      const canvasData: CanvasData = [];
-      for (let y = 0; y < pixelationCanvasSize; y++) {
-        const row = [];
-        for (let x = 0; x < pixelationCanvasSize; x++) {
-          const idx = (y * pixelationCanvasSize + x) * 4;
-          const r = imageData.data[idx];
-          const g = imageData.data[idx + 1];
-          const b = imageData.data[idx + 2];
-          const a = imageData.data[idx + 3];
-
-          const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
-
-          row.push({
-            color: a > 128 ? hex : null,
-            filled: a > 128,
-          });
+        if (!ctx) {
+          message.error(t('upload.processingFailed'));
+          URL.revokeObjectURL(blobUrl);
+          return;
         }
-        canvasData.push(row);
-      }
 
-      onConfirm(canvasData, pixelationCanvasSize);
-    };
+        // Draw image to fit the canvas size (maintaining aspect ratio)
+        const scale = Math.min(
+          pixelationCanvasSize / img.width,
+          pixelationCanvasSize / img.height
+        );
+        const x = (pixelationCanvasSize - img.width * scale) / 2;
+        const y = (pixelationCanvasSize - img.height * scale) / 2;
 
-    img.onerror = () => {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, pixelationCanvasSize, pixelationCanvasSize);
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+        // Get image data
+        const imageData = ctx.getImageData(0, 0, pixelationCanvasSize, pixelationCanvasSize);
+
+        // Convert to CanvasData
+        const canvasData: CanvasData = [];
+        for (let y = 0; y < pixelationCanvasSize; y++) {
+          const row = [];
+          for (let x = 0; x < pixelationCanvasSize; x++) {
+            const idx = (y * pixelationCanvasSize + x) * 4;
+            const r = imageData.data[idx];
+            const g = imageData.data[idx + 1];
+            const b = imageData.data[idx + 2];
+            const a = imageData.data[idx + 3];
+
+            const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+
+            row.push({
+              color: a > 128 ? hex : null,
+              filled: a > 128,
+            });
+          }
+          canvasData.push(row);
+        }
+
+        // Clean up blob URL
+        URL.revokeObjectURL(blobUrl);
+        onConfirm(canvasData, pixelationCanvasSize);
+      };
+
+      img.onerror = () => {
+        message.error(t('upload.processingFailed'));
+        URL.revokeObjectURL(blobUrl);
+      };
+
+      img.src = blobUrl;
+    } catch (error) {
       message.error(t('upload.processingFailed'));
-    };
-
-    img.src = processedImageUrl;
+    }
   }, [processedImageUrl, pixelationCanvasSize, onConfirm, t]);
 
   return (
