@@ -23,6 +23,7 @@ export interface LLMProviderRecord {
   baseUrl?: string;
   enabled: boolean;
   isDefault: boolean;
+  isImageProcessor: boolean;
   createdAt: number;
   updatedAt: number;
 }

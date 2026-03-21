@@ -25,6 +25,7 @@ export function LLMProviderManager() {
     addProvider,
     updateProvider,
     deleteProvider,
+    setImageProcessor,
   } = useLLMProviderStore();
 
   const providerOptions = PROVIDER_CONFIGS.map((p) => ({
@@ -45,6 +46,7 @@ export function LLMProviderManager() {
     form.setFieldsValue({
       enabled: true,
       isDefault: false,
+      isImageProcessor: false,
     });
     const defaultConfig = getProviderConfig('openai');
     if (defaultConfig?.defaultBaseUrl) {
@@ -95,13 +97,20 @@ export function LLMProviderManager() {
         model,
         enabled: values.enabled ?? true,
         isDefault: values.isDefault ?? false,
+        isImageProcessor: values.isImageProcessor ?? false,
       };
 
       if (editingProvider) {
         updateProvider(editingProvider.id, providerData);
+        if (providerData.isImageProcessor) {
+          setImageProcessor(editingProvider.id);
+        }
         message.success(t('common.edit') + ' ' + t('llm.provider'));
       } else {
-        addProvider(providerData);
+        const newProvider = addProvider(providerData);
+        if (providerData.isImageProcessor) {
+          setImageProcessor(newProvider.id);
+        }
         message.success(t('common.add') + ' ' + t('llm.provider'));
       }
 
@@ -120,6 +129,11 @@ export function LLMProviderManager() {
       }
     });
     message.success(t('llm.setAsDefault'));
+  };
+
+  const handleSetImageProcessor = (id: string) => {
+    setImageProcessor(id);
+    message.success(t('llm.setAsImageProcessor'));
   };
 
   const handleProviderChange = (value: ProviderType) => {
@@ -214,6 +228,26 @@ export function LLMProviderManager() {
             style={{ padding: 0, fontSize: 13 }}
           >
             {t('llm.setAsDefault')}
+          </Button>
+        ),
+    },
+    {
+      title: t('llm.imageProcessor'),
+      dataIndex: 'isImageProcessor',
+      key: 'isImageProcessor',
+      render: (isImageProcessor: boolean, record: LLMProvider) =>
+        isImageProcessor ? (
+          <span style={{ color: 'var(--color-primary)', fontSize: 13 }}>
+            {t('llm.imageProcessorActive')}
+          </span>
+        ) : (
+          <Button
+            type="link"
+            size="small"
+            onClick={() => handleSetImageProcessor(record.id)}
+            style={{ padding: 0, fontSize: 13 }}
+          >
+            {t('llm.setAsImageProcessor')}
           </Button>
         ),
     },
@@ -365,6 +399,10 @@ export function LLMProviderManager() {
           </Form.Item>
 
           <Form.Item name="isDefault" label={t('llm.setAsDefault')} valuePropName="checked" initialValue={false}>
+            <Switch />
+          </Form.Item>
+
+          <Form.Item name="isImageProcessor" label={t('llm.setAsImageProcessor')} valuePropName="checked" initialValue={false}>
             <Switch />
           </Form.Item>
 

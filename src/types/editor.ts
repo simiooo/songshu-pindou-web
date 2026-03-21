@@ -89,6 +89,7 @@ export type ProviderType =
   | 'deepseek'
   | 'moonshot'
   | 'qwen'
+  | 'volces'
   | 'ollama'
   | 'glm'
   | 'minimax'
@@ -220,6 +221,18 @@ export const PROVIDER_CONFIGS: ProviderConfig[] = [
     supportsCustomBaseUrl: true,
   },
   {
+    value: 'volces',
+    label: 'Seedream (字节跳动)',
+    models: [
+      { value: 'doubao-seedream-5-0-260128', label: 'Seedream 5.0 (推荐)' },
+      { value: 'doubao-seedream-5-0-lite-260128', label: 'Seedream 5.0 Lite' },
+      { value: 'doubao-seedream-4-5-251128', label: 'Seedream 4.5' },
+      { value: 'doubao-seedream-4-0-250828', label: 'Seedream 4.0' },
+    ],
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    supportsCustomBaseUrl: false,
+  },
+  {
     value: 'ollama',
     label: 'Ollama (本地)',
     models: [
@@ -260,6 +273,7 @@ export interface LLMProvider {
   baseUrl?: string;
   enabled: boolean;
   isDefault: boolean;
+  isImageProcessor: boolean;
   reasoningLevel?: string;
   maxTokens?: number;
   maxContextWindow?: number;

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
 import { ColorPalette } from '@/components/editor/ColorPalette';
 import { CanvasSizeSelector } from '@/components/editor/CanvasSizeSelector';
-import { PixelationPreview } from '@/components/upload/PixelationPreview';
+import { ImageProcessingPreview } from '@/components/upload/ImageProcessingPreview';
 import { LLMProviderManager } from '@/components/llm/LLMProviderManager';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEditorStore } from '@/store/editorStore';
@@ -669,13 +669,14 @@ export function EditorPage() {
           )}
         </div>
 
-        <PixelationPreview
+        <ImageProcessingPreview
           open={showPixelationModal}
           imageUrl={importedImage?.dataUrl || ''}
           imageWidth={importedImage?.width || 0}
           imageHeight={importedImage?.height || 0}
           onConfirm={handlePixelationConfirm}
           onCancel={handlePixelationCancel}
+          onOpenSettings={() => setShowSettingsModal(true)}
         />
 
         <ExportModal
