@@ -32,6 +32,7 @@ interface EditorStore {
   lastSavedAt: number | null;
   zoomLevel: number;
   panOffset: { x: number; y: number };
+  isPanningMode: boolean;
 
   setCanvasSize: (size: CanvasSize) => void;
   initializeCanvas: () => void;
@@ -56,6 +57,7 @@ interface EditorStore {
   applyOperations: (operations: EditorOperation[]) => void;
   setZoomLevel: (level: number) => void;
   setPanOffset: (offset: { x: number; y: number }) => void;
+  setIsPanningMode: (value: boolean) => void;
   resetView: () => void;
 }
 
@@ -90,6 +92,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   lastSavedAt: null,
   zoomLevel: 1,
   panOffset: { x: 0, y: 0 },
+  isPanningMode: false,
 
   setCanvasSize: (size) => {
     set({ canvasSize: size });
@@ -365,5 +368,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   setPanOffset: (offset) => set({ panOffset: offset }),
 
-  resetView: () => set({ zoomLevel: 1, panOffset: { x: 0, y: 0 } }),
+  setIsPanningMode: (value) => set({ isPanningMode: value }),
+
+  resetView: () => set({ zoomLevel: 1, panOffset: { x: 0, y: 0 }, isPanningMode: false }),
 }));

@@ -40,6 +40,7 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
     selection,
     colorGroups,
     activeColorGroupId,
+    isPanningMode,
   } = useEditorStore();
 
   const { theme } = useUIStore();
@@ -90,7 +91,7 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (e.altKey) {
+      if (e.altKey || isPanningMode) {
         setIsPanning(true);
         setPanStart({ clientX: e.clientX, clientY: e.clientY, panX: panOffset.x, panY: panOffset.y });
         return;
@@ -118,7 +119,7 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
         setCurrentOperations([op]);
       }
     },
-    [currentTool, currentColor, getPixelCoords, handlePixelAction, fillArea, pushHistory, panOffset]
+    [currentTool, currentColor, getPixelCoords, handlePixelAction, fillArea, pushHistory, panOffset, isPanningMode]
   );
 
   const handleMouseMove = useCallback(
@@ -169,14 +170,28 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
     setPanStart(null);
   }, [isDragging, currentOperations, pushHistory, currentTool, localSelection, setSelection]);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const debouncedZoomRef = useRef<number | null>(null);
+  const debouncedZoomLevelRef = useRef(zoomLevel);
+
+  const debouncedSetZoomLevel = useCallback((level: number) => {
+    debouncedZoomLevelRef.current = level;
+    if (debouncedZoomRef.current !== null) {
+      cancelAnimationFrame(debouncedZoomRef.current);
+    }
+    debouncedZoomRef.current = requestAnimationFrame(() => {
+      setZoomLevel(debouncedZoomLevelRef.current);
+      debouncedZoomRef.current = null;
+    });
+  }, [setZoomLevel]);
+
+  const handleWheelDebounced = useCallback((e: React.WheelEvent) => {
     e.stopPropagation();
     e.preventDefault();
 
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.min(Math.max(zoomLevel * delta, 0.5), 5);
-    setZoomLevel(newZoom);
-  }, [zoomLevel, setZoomLevel]);
+    debouncedSetZoomLevel(newZoom);
+  }, [zoomLevel, debouncedSetZoomLevel]);
 
   const dpr = useRef(window.devicePixelRatio || 1).current;
   const isDark = theme === 'dark';
@@ -319,8 +334,8 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
     };
   }, [localSelection, selection]);
 
-  const cursorStyle = isPanning
-    ? 'grabbing'
+  const cursorStyle = isPanning || isPanningMode
+    ? 'grab'
     : currentTool === 'selection'
     ? (isDragging ? 'move' : 'crosshair')
     : (currentTool === 'brush' || currentTool === 'eraser' ? 'crosshair' : 'default');
@@ -333,6 +348,8 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
       style={{
         position: 'relative',
         display: 'inline-block',
+        width: logicalWidth,
+        height: logicalHeight,
         background: containerBackground,
         boxShadow: containerShadow,
         borderRadius: 4,
@@ -346,7 +363,7 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
+        onWheel={handleWheelDebounced}
         style={{
           display: 'block',
           cursor: cursorStyle,
@@ -356,10 +373,10 @@ export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCan
         <div
           style={{
             position: 'absolute',
-            left: selectionBox.left * zoomLevel,
-            top: selectionBox.top * zoomLevel,
-            width: selectionBox.width * zoomLevel,
-            height: selectionBox.height * zoomLevel,
+            left: selectionBox.left,
+            top: selectionBox.top,
+            width: selectionBox.width,
+            height: selectionBox.height,
             border: '2px dashed #D4763B',
             boxSizing: 'border-box',
             pointerEvents: 'none',

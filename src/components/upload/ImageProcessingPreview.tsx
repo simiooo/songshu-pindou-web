@@ -252,6 +252,17 @@ export function ImageProcessingPreview({
         />
       </div>
 
+      {/* 自定义 Prompt 输入 */}
+      <div style={{ marginBottom: 'var(--space-lg)', maxWidth: 500, margin: '0 auto var(--space-lg)' }}>
+        <Input.TextArea
+          placeholder={t('upload.promptPlaceholder') || '输入自定义提示词（可选），描述你想要的图案效果...'}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={2}
+          disabled={isGenerating}
+        />
+      </div>
+
       <div style={{
         display: 'flex',
         gap: 'var(--space-md)',
@@ -369,13 +380,31 @@ export function ImageProcessingPreview({
 
       {hasImageProcessor && (
         <div>
-          <Input.TextArea
-            placeholder={t('upload.promptPlaceholder')}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={2}
-            disabled={isGenerating}
-          />
+          <div style={{ marginBottom: 'var(--space-md)' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+              <span style={{ fontWeight: 500, color: 'var(--color-text)', fontSize: 13 }}>
+                {t('color.colorGroup') || '色号组'}:
+              </span>
+              <Select
+                value={selectedColorGroupId}
+                onChange={(value) => {
+                  setSelectedColorGroupId(value);
+                }}
+                style={{ minWidth: 200 }}
+                options={colorGroups.map((group) => ({
+                  value: group.id,
+                  label: `${group.name} (${group.brand} ${group.beadSize}) - ${group.colors.length} ${t('pixelation.colors') || '色'}`
+                }))}
+              />
+            </div>
+            <Input.TextArea
+              placeholder={t('upload.promptPlaceholder')}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={2}
+              disabled={isGenerating}
+            />
+          </div>
           <div style={{ marginTop: 'var(--space-sm)', display: 'flex', gap: 'var(--space-sm)' }}>
             <Button
               type="primary"

@@ -20,6 +20,7 @@ import {
   ShrinkOutlined,
   TagOutlined,
   UploadOutlined,
+  DragOutlined,
 } from '@ant-design/icons';
 
 interface FloatingToolbarProps {
@@ -99,6 +100,8 @@ export function FloatingToolbar({ position = 'top-left', onUpload }: FloatingToo
     zoomLevel,
     setZoomLevel,
     resetView,
+    isPanningMode,
+    setIsPanningMode,
   } = useEditorStore();
 
   const tools: {
@@ -148,12 +151,12 @@ export function FloatingToolbar({ position = 'top-left', onUpload }: FloatingToo
 
   const positionStyles: Record<typeof position, React.CSSProperties> = {
     'top-left': {
-      top: 16,
-      left: 16,
+      top: 6,
+      left: 6,
     },
     'top-right': {
-      top: 16,
-      right: 16,
+      top: 6,
+      right: 6,
     },
   };
 
@@ -231,6 +234,15 @@ export function FloatingToolbar({ position = 'top-left', onUpload }: FloatingToo
             icon={<ReloadOutlined />}
             tooltip={t('editor.resetView')}
             onClick={resetView}
+          />
+
+          <Divider />
+
+          <ToolButton
+            icon={<DragOutlined />}
+            tooltip={`${t('editor.dragCanvas')} (Alt+${t('shortcuts.drag') || '拖动'})`}
+            onClick={() => setIsPanningMode(!isPanningMode)}
+            active={isPanningMode}
           />
 
           <Divider />

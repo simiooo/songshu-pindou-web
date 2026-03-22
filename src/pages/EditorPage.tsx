@@ -568,9 +568,10 @@ export function EditorPage() {
                   }}
                 >
                   {hasImage ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-md)' }}>
+                    <div style={{ display: 'flex', height: "100%", width: '100%',flexDirection: 'column', alignItems: 'center', gap: 'var(--space-md)', position: 'relative' }}>
+                      <FloatingToolbar position="top-left" onUpload={handleReupload} />
                       <div style={{ position: 'relative' }}>
-                        <FloatingToolbar position="top-left" onUpload={handleReupload} />
+                        
                         <EditorCanvas showGrid={showGrid} gridColor={gridColor} showColorLabels={showColorLabels} />
                       </div>
                       {colorStats.length > 0 && (
@@ -585,6 +586,10 @@ export function EditorPage() {
                             boxShadow: 'var(--shadow-sm)',
                             maxWidth: '100%',
                             overflowX: 'auto',
+                            marginTop: 'var(--space-md)',
+                            position: 'absolute',
+                            left: 10,
+                            bottom: 10
                           }}
                         >
                           <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>

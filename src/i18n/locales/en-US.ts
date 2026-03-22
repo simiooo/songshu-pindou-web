@@ -19,6 +19,8 @@ export default {
     lightMode: 'Light Mode',
     total: 'Total',
     retry: 'Retry',
+    expand: 'Expand',
+    collapse: 'Collapse',
   },
   editor: {
     tools: 'Tools',
@@ -36,6 +38,7 @@ export default {
     redo: 'Redo',
     steps: 'steps',
     redoSteps: 'redo steps',
+    dragCanvas: 'Drag Canvas',
   },
   color: {
     palette: 'Colors',
@@ -168,5 +171,6 @@ export default {
     grid: 'G',
     undo: 'Ctrl+Z',
     redo: 'Ctrl+Y',
+    drag: 'Drag',
   },
 };

@@ -19,6 +19,8 @@ export default {
     lightMode: '浅色模式',
     total: '总计',
     retry: '重试',
+    expand: '展开',
+    collapse: '收起',
   },
   editor: {
     tools: '工具',
@@ -36,6 +38,7 @@ export default {
     redo: '重做',
     steps: '步操作',
     redoSteps: '步重做',
+    dragCanvas: '拖动画布',
   },
   color: {
     palette: '色号',
@@ -168,5 +171,6 @@ export default {
     grid: 'G',
     undo: 'Ctrl+Z',
     redo: 'Ctrl+Y',
+    drag: '拖动',
   },
 };
