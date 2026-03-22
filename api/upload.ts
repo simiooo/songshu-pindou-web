@@ -74,9 +74,12 @@ async function handleUpload(url: URL, req: VercelRequest, res: VercelResponse) {
   });
 
   return new Promise<void>((resolve) => {
-    // 构建请求头，保留原始的 Content-Type（包含 boundary）
+    // 构建请求头，模仿 vite proxy 的 changeOrigin: true
     const requestHeaders: Record<string, string> = {
       'Accept': 'application/json',
+      'Host': 'uguu.se',
+      'Origin': 'https://uguu.se',
+      'Referer': 'https://uguu.se/',
     };
     
     // 必须保留原始的 Content-Type，包含 boundary
@@ -86,10 +89,8 @@ async function handleUpload(url: URL, req: VercelRequest, res: VercelResponse) {
       console.log('[Upload] Using Content-Type:', originalContentType);
     }
     
-    // 保留其他重要头部
-    if (req.headers['content-length']) {
-      requestHeaders['Content-Length'] = String(body.length);
-    }
+    // 设置正确的 Content-Length
+    requestHeaders['Content-Length'] = String(body.length);
     
     console.log('[Upload] Request headers:', requestHeaders);
     
