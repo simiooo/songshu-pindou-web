@@ -37,11 +37,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 async function handleUpload(url: URL, req: VercelRequest, res: VercelResponse) {
   const targetUrl = `${UGUU_TARGET}/upload${url.search}`;
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of req.body) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const body = chunks.length > 0 ? Buffer.concat(chunks) : null;
+  // 读取请求体数据
+  const body = await new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
 
   return new Promise<void>((resolve) => {
     const proxyReq = https.request(targetUrl, {
@@ -74,7 +76,7 @@ async function handleUpload(url: URL, req: VercelRequest, res: VercelResponse) {
       resolve();
     });
 
-    if (body) {
+    if (body.length > 0) {
       proxyReq.write(body);
     }
     proxyReq.end();
