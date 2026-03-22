@@ -56,8 +56,9 @@ export const PERLER_BEAD_PROMPT_TEMPLATE = `请将参考图片转换为拼豆（
 - 整体风格活泼、卡通化但可辨认
 
 比例处理要求：
-- 如果用户上传的图片比例与模型输出的比例不一致，模型需要按语义补全或矫正比例
-- 当原图比例与目标输出比例不匹配时，应在保持主体内容完整的前提下，通过合理的场景延伸或裁剪来适应目标比例
+- 输出图片必须为 1:1 正方形比例（1024x1024 或 2048x2048）
+- 如果用户上传的图片比例不是 1:1，模型需要通过语义补全或裁剪将其调整为 1:1 正方形
+- 补全时应保持主体内容完整，通过合理的场景延伸填充空白区域
 - 确保补全后的内容在语义上连贯自然，符合原图的场景和氛围
 - 主体内容不应被不合理地拉伸、压缩或截断`;
 
@@ -182,69 +183,18 @@ export function isVolcesAPI(baseUrl: string): boolean {
   return baseUrl.includes('volces.com') || baseUrl.includes('ark.cn-beijing');
 }
 
-// 字节跳动推荐尺寸（2K 分辨率）
-const VOLCES_2K_SIZES = {
-  '1:1': '2048x2048',
-  '3:4': '1728x2304',
-  '4:3': '2304x1728',
-  '16:9': '2848x1600',
-  '9:16': '1600x2848',
-  '3:2': '2496x1664',
-  '2:3': '1664x2496',
-} as const;
-
-// OpenAI 兼容尺寸
-const OPENAI_SIZES = {
-  '1:1': '1024x1024',
-  '16:9': '1792x1024',
-  '9:16': '1024x1792',
-  '4:3': '1024x1536',
-  '3:4': '1024x1536',
-  '3:2': '1024x1536',
-  '2:3': '1024x1536',
-} as const;
-
-// 计算最接近的宽高比
-function getClosestAspectRatio(width: number, height: number): string {
-  const ratio = width / height;
-  const ratios = [
-    { key: '1:1', value: 1 },
-    { key: '3:4', value: 0.75 },
-    { key: '4:3', value: 1.333 },
-    { key: '16:9', value: 1.778 },
-    { key: '9:16', value: 0.5625 },
-    { key: '3:2', value: 1.5 },
-    { key: '2:3', value: 0.667 },
-  ];
-
-  let closest = ratios[0];
-  let minDiff = Math.abs(ratio - closest.value);
-
-  for (const r of ratios) {
-    const diff = Math.abs(ratio - r.value);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = r;
-    }
-  }
-
-  return closest.key;
-}
-
-// 根据原图比例计算 AI 生成尺寸
+// 根据原图比例计算 AI 生成尺寸（固定 1:1）
 export function calculateImageSize(
-  originalWidth: number,
-  originalHeight: number,
+  _originalWidth: number,
+  _originalHeight: number,
   isVolces: boolean
 ): string {
-  const aspectRatio = getClosestAspectRatio(originalWidth, originalHeight);
-
   if (isVolces) {
-    // 字节跳动 API - 使用 2K 分辨率推荐尺寸
-    return VOLCES_2K_SIZES[aspectRatio as keyof typeof VOLCES_2K_SIZES] || '2048x2048';
+    // 字节跳动 API - 固定使用 1:1 比例（2K 分辨率）
+    return '2048x2048';
   } else {
-    // 标准 OpenAI 兼容 API
-    return OPENAI_SIZES[aspectRatio as keyof typeof OPENAI_SIZES] || '1024x1024';
+    // 标准 OpenAI 兼容 API - 固定使用 1:1 比例
+    return '1024x1024';
   }
 }
 

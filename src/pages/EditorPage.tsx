@@ -588,8 +588,8 @@ export function EditorPage() {
                             overflowX: 'auto',
                             marginTop: 'var(--space-md)',
                             position: 'absolute',
-                            left: 10,
-                            bottom: 10
+                            left: 6,
+                            bottom: 6
                           }}
                         >
                           <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>
