@@ -291,10 +291,10 @@ export function LLMProviderManager() {
         dataSource={providers}
         rowKey="id"
         pagination={false}
+        scroll={{ x: 'max-content' }}
         locale={{ emptyText: t('llm.noProviders') }}
         style={{
           borderRadius: 'var(--radius-md)',
-          overflow: 'hidden',
         }}
       />
 
