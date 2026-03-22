@@ -37,11 +37,35 @@ export const PERLER_BEAD_PROMPT_TEMPLATE = `请将参考图片转换为拼豆（
 5. 保留原图核心特征：确保转换后的图案能清晰辨认出原图的主体内容
 6. 适合网格化：图像应该是方块像素化的，适合映射到方形网格画布上
 
+重要提示：
+- 不要在图片上生成任何网格线、边框线或分隔线
+- 每个颜色块应该是纯色的，不要有描边或轮廓线
+- 颜色块之间通过颜色差异自然区分，不要添加额外的线条
+- 绝对不是乐高（Lego）风格，不要生成任何积木凸起或积木拼接效果
+
+背景处理要求：
+- 背景必须是纯色或简单的渐变色，绝对不能有网格、点阵、纹理或图案
+- 背景不能有任何装饰性元素，如星星、圆点、方块等图案
+- 背景必须是平坦、干净、统一的纯色区域
+- 主体与背景的边界要清晰，但不要有描边或阴影
+
 输出要求：
 - 生成适合拼豆制作的图案
 - 确保主体居中且完整
-- 背景尽量简化或使用纯色
+- 背景必须是纯色，不能有纹理或图案
 - 整体风格活泼、卡通化但可辨认`;
+
+/**
+ * 生成带网格参数的 Prompt
+ * @param basePrompt 基础 prompt
+ * @param gridSize 网格大小（如 29, 52, 72 等）
+ * @returns 包含网格参数的最终 prompt
+ */
+export function generateGridPrompt(basePrompt: string, gridSize: number): string {
+  const gridInstruction = `\n\n网格参数要求：\n- 最终图案必须适配 ${gridSize}×${gridSize} 的方形网格\n- 图像应该被划分为 ${gridSize} 行 ${gridSize} 列的网格结构\n- 每个网格单元格代表一颗拼豆，且每个网格内的颜色必须完全相同（纯色填充）\n- 确保图案在 ${gridSize}×${gridSize} 网格内完整呈现，主体居中\n- 考虑网格边界，避免图案被截断\n- 绝对不能生成网格线、边框线或分隔线，颜色块之间只能通过颜色差异区分\n- 背景区域必须是纯色填充，不能有纹理、图案或装饰性元素`;
+
+  return basePrompt ? `${basePrompt}${gridInstruction}` : `${PERLER_BEAD_PROMPT_TEMPLATE}${gridInstruction}`;
+}
 
 // uguu.se 上传响应接口
 interface UguuUploadResponse {
@@ -105,6 +129,33 @@ async function uploadImageToUguu(imageUrl: string): Promise<string> {
       `Failed to upload image: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+}
+
+// 将外部图片 URL 转换为代理 URL
+function getProxiedImageUrl(originalUrl: string): string {
+  // 如果 URL 已经是代理地址或 base64，直接返回
+  if (originalUrl.startsWith('/api/') || originalUrl.startsWith('data:')) {
+    return originalUrl;
+  }
+
+  // 如果 URL 是 uguu.se 的，提取文件名并通过代理访问
+  if (originalUrl.includes('uguu.se')) {
+    try {
+      const url = new URL(originalUrl);
+      // 提取路径中的文件名部分
+      const pathParts = url.pathname.split('/');
+      const filename = pathParts[pathParts.length - 1];
+      if (filename) {
+        return `/api/upload/${filename}`;
+      }
+    } catch {
+      // URL 解析失败，返回原 URL
+      return originalUrl;
+    }
+  }
+
+  // 其他外部 URL，返回原 URL
+  return originalUrl;
 }
 
 // 检测是否是字节跳动/火山引擎 API
@@ -288,7 +339,8 @@ async function generateWithOpenAI(
   const result = data.data[0];
 
   if (result.url) {
-    return { imageUrl: result.url, revisedPrompt: result.revised_prompt };
+    // 将外部 URL 转换为代理 URL
+    return { imageUrl: getProxiedImageUrl(result.url), revisedPrompt: result.revised_prompt };
   } else if (result.b64_json) {
     return { imageUrl: `data:image/png;base64,${result.b64_json}`, revisedPrompt: result.revised_prompt };
   }
@@ -356,14 +408,16 @@ async function generateWithOpenAICompatible(
   if (data.data && data.data[0]) {
     const result = data.data[0];
     if (result.url) {
-      return { imageUrl: result.url, revisedPrompt: result.revised_prompt };
+      // 将外部 URL 转换为代理 URL
+      return { imageUrl: getProxiedImageUrl(result.url), revisedPrompt: result.revised_prompt };
     } else if (result.b64_json) {
       return { imageUrl: `data:image/png;base64,${result.b64_json}`, revisedPrompt: result.revised_prompt };
     }
   }
 
   if (data.url) {
-    return { imageUrl: data.url, revisedPrompt: data.revised_prompt };
+    // 将外部 URL 转换为代理 URL
+    return { imageUrl: getProxiedImageUrl(data.url), revisedPrompt: data.revised_prompt };
   }
 
   throw new ImageGenerationError('No image data in response');

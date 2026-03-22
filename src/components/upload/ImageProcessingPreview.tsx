@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Modal, Button, Spin, Alert, Input, message } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { CanvasSize, CanvasData } from '@/types/editor';
 import { useUploadStore } from '@/store/uploadStore';
 import { useLLMProviderStore } from '@/store/llmProviderStore';
-import { useImageGeneration, PERLER_BEAD_PROMPT_TEMPLATE, isVolcesAPI, calculateImageSize } from '@/hooks/useImageGeneration';
+import { useImageGeneration, generateGridPrompt, isVolcesAPI, calculateImageSize } from '@/hooks/useImageGeneration';
 import { SettingOutlined, ReloadOutlined } from '@ant-design/icons';
 
 interface ImageProcessingPreviewProps {
@@ -17,6 +17,9 @@ interface ImageProcessingPreviewProps {
   onOpenSettings: () => void;
 }
 
+// 可用的网格尺寸选项
+const GRID_SIZES = [29, 52, 72, 104, 156, 200] as const;
+
 export function ImageProcessingPreview({
   open,
   imageUrl,
@@ -27,28 +30,31 @@ export function ImageProcessingPreview({
   onOpenSettings,
 }: ImageProcessingPreviewProps) {
   const { t } = useTranslation();
-  const { pixelationCanvasSize, setPixelationCanvasSize } = useUploadStore();
+  const { setPixelationCanvasSize } = useUploadStore();
   const { getImageProcessor } = useLLMProviderStore();
-  const { generateImage, isGenerating, error } = useImageGeneration();
+  const { generateImage, isGenerating } = useImageGeneration();
 
   const [prompt, setPrompt] = useState('');
   const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
-  
-  // Use ref to track if we've generated for this open
-  const hasGeneratedRef = useRef(false);
+  const [selectedGridSize, setSelectedGridSize] = useState<CanvasSize | null>(null);
+  const [isConfirmed, setIsConfirmed] = useState(false);
 
   const imageProcessor = getImageProcessor();
   const hasImageProcessor = !!imageProcessor;
 
-  // Reset ref when modal closes
+  // Reset state when modal closes
   useEffect(() => {
     if (!open) {
-      hasGeneratedRef.current = false;
+      setPrompt('');
+      setProcessedImageUrl(null);
+      setProcessingError(null);
+      setSelectedGridSize(null);
+      setIsConfirmed(false);
     }
   }, [open]);
 
-  const performGeneration = useCallback(async (userPrompt: string) => {
+  const performGeneration = useCallback(async (userPrompt: string, gridSize: CanvasSize) => {
     if (!imageProcessor || isGenerating) return;
 
     setProcessingError(null);
@@ -56,15 +62,13 @@ export function ImageProcessingPreview({
     try {
       // 检测是否是字节跳动 API
       const isVolces = isVolcesAPI(imageProcessor.baseUrl || '');
-      
-      // 构建最终 prompt：用户输入 + 拼豆模板
-      const finalPrompt = userPrompt 
-        ? `${userPrompt}\n\n${PERLER_BEAD_PROMPT_TEMPLATE}`
-        : PERLER_BEAD_PROMPT_TEMPLATE;
+
+      // 构建带网格参数的最终 prompt
+      const finalPrompt = generateGridPrompt(userPrompt, gridSize);
 
       // 根据原图比例自动计算尺寸
       const size = calculateImageSize(imageWidth, imageHeight, isVolces);
-      
+
       // 字节跳动特有参数
       const additionalParams = isVolces ? {
         sequential_image_generation: 'disabled',
@@ -73,7 +77,7 @@ export function ImageProcessingPreview({
       } : {
         stream: false,
       };
-      
+
       const result = await generateImage(imageProcessor, {
         prompt: finalPrompt,
         imageUrl,
@@ -81,7 +85,7 @@ export function ImageProcessingPreview({
         responseFormat: 'url',
         additionalParams,
       });
-      
+
       if (result?.imageUrl) {
         setProcessedImageUrl(result.imageUrl);
       }
@@ -91,32 +95,35 @@ export function ImageProcessingPreview({
     }
   }, [generateImage, imageProcessor, imageUrl, imageWidth, imageHeight, t, isGenerating]);
 
-  // Handle auto-generation on first open
-  const handleAfterOpenChange = useCallback((isOpen: boolean) => {
-    if (isOpen && !hasGeneratedRef.current) {
-      setPrompt('');
-      setProcessedImageUrl(null);
-      setProcessingError(null);
-      hasGeneratedRef.current = true;
-      
+  const handleGridSizeSelect = useCallback((size: CanvasSize) => {
+    setSelectedGridSize(size);
+    setPixelationCanvasSize(size);
+  }, [setPixelationCanvasSize]);
+
+  const handleConfirmGridSize = useCallback(() => {
+    if (selectedGridSize) {
+      setIsConfirmed(true);
+      // 自动开始生成
       if (hasImageProcessor) {
-        void performGeneration('');
+        void performGeneration(prompt, selectedGridSize);
       }
     }
-  }, [hasImageProcessor, performGeneration]);
+  }, [selectedGridSize, hasImageProcessor, prompt, performGeneration]);
 
   const handleGenerate = useCallback(() => {
-    void performGeneration(prompt);
-  }, [prompt, performGeneration]);
+    if (selectedGridSize) {
+      void performGeneration(prompt, selectedGridSize);
+    }
+  }, [prompt, selectedGridSize, performGeneration]);
 
   const handleConfirm = useCallback(async () => {
-    if (!processedImageUrl) return;
+    if (!processedImageUrl || !selectedGridSize) return;
 
     try {
       // 使用代理获取图片，避免 CORS 问题
       const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(processedImageUrl)}`;
       const response = await fetch(proxyUrl);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch image through proxy');
       }
@@ -126,9 +133,10 @@ export function ImageProcessingPreview({
 
       const img = new Image();
       img.onload = () => {
+        // 创建与原图相同尺寸的 canvas
         const canvas = document.createElement('canvas');
-        canvas.width = pixelationCanvasSize;
-        canvas.height = pixelationCanvasSize;
+        canvas.width = img.width;
+        canvas.height = img.height;
         const ctx = canvas.getContext('2d');
 
         if (!ctx) {
@@ -137,27 +145,30 @@ export function ImageProcessingPreview({
           return;
         }
 
-        // Draw image to fit the canvas size (maintaining aspect ratio)
-        const scale = Math.min(
-          pixelationCanvasSize / img.width,
-          pixelationCanvasSize / img.height
-        );
-        const x = (pixelationCanvasSize - img.width * scale) / 2;
-        const y = (pixelationCanvasSize - img.height * scale) / 2;
+        // 绘制原图
+        ctx.drawImage(img, 0, 0);
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, pixelationCanvasSize, pixelationCanvasSize);
-        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-
-        // Get image data
-        const imageData = ctx.getImageData(0, 0, pixelationCanvasSize, pixelationCanvasSize);
-
-        // Convert to CanvasData
+        // 获取完整图像数据
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
         const canvasData: CanvasData = [];
-        for (let y = 0; y < pixelationCanvasSize; y++) {
+
+        // 将原图划分为 gridSize x gridSize 的网格，每个网格取中心点像素
+        const cellWidth = img.width / selectedGridSize;
+        const cellHeight = img.height / selectedGridSize;
+
+        for (let gridY = 0; gridY < selectedGridSize; gridY++) {
           const row = [];
-          for (let x = 0; x < pixelationCanvasSize; x++) {
-            const idx = (y * pixelationCanvasSize + x) * 4;
+          for (let gridX = 0; gridX < selectedGridSize; gridX++) {
+            // 计算该网格单元中心点在原图中的坐标
+            const centerX = Math.floor(gridX * cellWidth + cellWidth / 2);
+            const centerY = Math.floor(gridY * cellHeight + cellHeight / 2);
+
+            // 确保坐标在有效范围内
+            const safeX = Math.min(centerX, img.width - 1);
+            const safeY = Math.min(centerY, img.height - 1);
+
+            // 读取中心点像素
+            const idx = (safeY * img.width + safeX) * 4;
             const r = imageData.data[idx];
             const g = imageData.data[idx + 1];
             const b = imageData.data[idx + 2];
@@ -175,7 +186,7 @@ export function ImageProcessingPreview({
 
         // Clean up blob URL
         URL.revokeObjectURL(blobUrl);
-        onConfirm(canvasData, pixelationCanvasSize);
+        onConfirm(canvasData, selectedGridSize);
       };
 
       img.onerror = () => {
@@ -184,19 +195,261 @@ export function ImageProcessingPreview({
       };
 
       img.src = blobUrl;
-    } catch (error) {
+    } catch {
       message.error(t('upload.processingFailed'));
     }
-  }, [processedImageUrl, pixelationCanvasSize, onConfirm, t]);
+  }, [processedImageUrl, selectedGridSize, onConfirm, t]);
+
+  // 渲染网格尺寸选择界面
+  const renderGridSelection = () => (
+    <div style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
+      <h3 style={{ marginBottom: 'var(--space-lg)', color: 'var(--color-text)' }}>
+        {t('upload.selectGridSize') || '请选择网格尺寸'}
+      </h3>
+      <p style={{ marginBottom: 'var(--space-lg)', color: 'var(--color-text-secondary)' }}>
+        {t('upload.gridSizeDescription') || '选择拼豆画布的网格尺寸，这将决定最终图案的精细程度'}
+      </p>
+      <div style={{
+        display: 'flex',
+        gap: 'var(--space-md)',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        marginBottom: 'var(--space-xl)'
+      }}>
+        {GRID_SIZES.map((size) => (
+          <Button
+            key={size}
+            type={selectedGridSize === size ? 'primary' : 'default'}
+            onClick={() => handleGridSizeSelect(size as CanvasSize)}
+            size="large"
+            style={{
+              minWidth: 100,
+              height: 60,
+              fontSize: 16,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 'bold' }}>{size}×{size}</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                {size === 29 && (t('upload.gridSizeSmall') || '小型')}
+                {size === 52 && (t('upload.gridSizeMedium') || '中型')}
+                {size === 72 && (t('upload.gridSizeLarge') || '大型')}
+                {size === 104 && (t('upload.gridSizeXLarge') || '超大型')}
+                {size === 156 && (t('upload.gridSizeXXLarge') || '特大')}
+                {size === 200 && (t('upload.gridSizeHuge') || '巨大')}
+              </div>
+            </div>
+          </Button>
+        ))}
+      </div>
+      <Button
+        type="primary"
+        size="large"
+        onClick={handleConfirmGridSize}
+        disabled={!selectedGridSize}
+      >
+        {t('upload.confirmGridSize') || '确认并开始生成'}
+      </Button>
+    </div>
+  );
+
+  // 渲染图片处理和预览界面
+  const renderProcessingPreview = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+      {!hasImageProcessor && (
+        <Alert
+          type="error"
+          message={t('upload.noImageProcessor')}
+          description={
+            <div>
+              <p>{t('upload.configureImageProcessor')}</p>
+              <Button
+                type="primary"
+                icon={<SettingOutlined />}
+                onClick={onOpenSettings}
+                size="small"
+              >
+                {t('upload.openSettings')}
+              </Button>
+            </div>
+          }
+          showIcon
+        />
+      )}
+
+      {processingError && (
+        <Alert
+          type="error"
+          message={t('upload.processingFailed')}
+          description={processingError}
+          showIcon
+          action={
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={handleGenerate}
+              disabled={!hasImageProcessor || isGenerating}
+            >
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      )}
+
+      <div style={{
+        padding: 'var(--space-sm) var(--space-md)',
+        background: 'var(--color-bg-secondary)',
+        borderRadius: 'var(--radius-md)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          {t('upload.selectedGridSize') || '已选网格尺寸'}:
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+          <span style={{ fontWeight: 'bold', fontSize: 16 }}>
+            {selectedGridSize}×{selectedGridSize}
+          </span>
+          <Button
+            size="small"
+            onClick={() => {
+              setIsConfirmed(false);
+              setProcessedImageUrl(null);
+              setProcessingError(null);
+            }}
+          >
+            {t('upload.changeGridSize') || '修改'}
+          </Button>
+        </div>
+      </div>
+
+      {hasImageProcessor && (
+        <div>
+          <Input.TextArea
+            placeholder={t('upload.promptPlaceholder')}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={2}
+            disabled={isGenerating}
+          />
+          <div style={{ marginTop: 'var(--space-sm)', display: 'flex', gap: 'var(--space-sm)' }}>
+            <Button
+              type="primary"
+              onClick={handleGenerate}
+              loading={isGenerating}
+              disabled={!hasImageProcessor}
+            >
+              {processedImageUrl ? t('upload.regenerate') : t('upload.generate')}
+            </Button>
+            {processedImageUrl && (
+              <Button onClick={() => setProcessedImageUrl(null)}>
+                {t('upload.clear')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 'var(--space-lg)' }}>
+        <div style={{ flex: 1 }}>
+          <label
+            style={{
+              fontWeight: 500,
+              color: 'var(--color-text)',
+              fontSize: 13,
+              display: 'block',
+              marginBottom: 'var(--space-sm)',
+            }}
+          >
+            {t('pixelation.originalImage')}
+          </label>
+          <div
+            style={{
+              width: 360,
+              height: 360,
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              background: 'var(--color-bg-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <img
+              src={imageUrl}
+              alt="Original"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <label
+            style={{
+              fontWeight: 500,
+              color: 'var(--color-text)',
+              fontSize: 13,
+              display: 'block',
+              marginBottom: 'var(--space-sm)',
+            }}
+          >
+            {t('upload.processedPreview')} ({selectedGridSize}×{selectedGridSize})
+          </label>
+          <div
+            style={{
+              width: 360,
+              height: 360,
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              background: 'var(--color-bg)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+            }}
+          >
+            {isGenerating ? (
+              <div style={{ textAlign: 'center' }}>
+                <Spin size="large" />
+                <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-text-secondary)' }}>
+                  {t('upload.processing')}
+                </p>
+              </div>
+            ) : processedImageUrl ? (
+              <img
+                src={processedImageUrl}
+                alt="Processed"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                }}
+              />
+            ) : (
+              <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                <p>{hasImageProcessor ? t('upload.clickGenerate') : t('upload.configureFirst')}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <Modal
       title={t('upload.imageProcessing')}
       open={open}
       onCancel={onCancel}
-      afterOpenChange={handleAfterOpenChange}
       width={800}
-      footer={[
+      footer={isConfirmed ? [
         <Button key="cancel" onClick={onCancel}>
           {t('common.cancel')}
         </Button>,
@@ -208,185 +461,13 @@ export function ImageProcessingPreview({
         >
           {t('upload.applyToCanvas')}
         </Button>,
+      ] : [
+        <Button key="cancel" onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>,
       ]}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-        {!hasImageProcessor && (
-          <Alert
-            type="error"
-            message={t('upload.noImageProcessor')}
-            description={
-              <div>
-                <p>{t('upload.configureImageProcessor')}</p>
-                <Button
-                  type="primary"
-                  icon={<SettingOutlined />}
-                  onClick={onOpenSettings}
-                  size="small"
-                >
-                  {t('upload.openSettings')}
-                </Button>
-              </div>
-            }
-            showIcon
-          />
-        )}
-
-        {(processingError || error) && (
-          <Alert
-            type="error"
-            message={t('upload.processingFailed')}
-            description={processingError || (error instanceof Error ? error.message : String(error))}
-            showIcon
-            action={
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                onClick={handleGenerate}
-                disabled={!hasImageProcessor || isGenerating}
-              >
-                {t('common.retry')}
-              </Button>
-            }
-          />
-        )}
-
-        <div>
-          <span style={{ fontWeight: 500, marginRight: 'var(--space-sm)', color: 'var(--color-text-secondary)' }}>
-            {t('pixelation.canvasSize')}:
-          </span>
-          <Button.Group>
-            {[29, 52, 72, 104].map((size) => (
-              <Button
-                key={size}
-                type={pixelationCanvasSize === size ? 'primary' : 'default'}
-                onClick={() => setPixelationCanvasSize(size as CanvasSize)}
-                size="small"
-                disabled={isGenerating}
-              >
-                {size}
-              </Button>
-            ))}
-          </Button.Group>
-        </div>
-
-        {hasImageProcessor && (
-          <div>
-            <Input.TextArea
-              placeholder={t('upload.promptPlaceholder')}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={2}
-              disabled={isGenerating}
-            />
-            <div style={{ marginTop: 'var(--space-sm)', display: 'flex', gap: 'var(--space-sm)' }}>
-              <Button
-                type="primary"
-                onClick={handleGenerate}
-                loading={isGenerating}
-                disabled={!hasImageProcessor}
-              >
-                {processedImageUrl ? t('upload.regenerate') : t('upload.generate')}
-              </Button>
-              {processedImageUrl && (
-                <Button onClick={() => setProcessedImageUrl(null)}>
-                  {t('upload.clear')}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 'var(--space-lg)' }}>
-          <div style={{ flex: 1 }}>
-            <label
-              style={{
-                fontWeight: 500,
-                color: 'var(--color-text)',
-                fontSize: 13,
-                display: 'block',
-                marginBottom: 'var(--space-sm)',
-              }}
-            >
-              {t('pixelation.originalImage')}
-            </label>
-            <div
-              style={{
-                width: 360,
-                height: 360,
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                overflow: 'hidden',
-                background: 'var(--color-bg-secondary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <img
-                src={imageUrl}
-                alt="Original"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  objectFit: 'contain',
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ flex: 1 }}>
-            <label
-              style={{
-                fontWeight: 500,
-                color: 'var(--color-text)',
-                fontSize: 13,
-                display: 'block',
-                marginBottom: 'var(--space-sm)',
-              }}
-            >
-              {t('upload.processedPreview')} ({pixelationCanvasSize}×{pixelationCanvasSize})
-            </label>
-            <div
-              style={{
-                width: 360,
-                height: 360,
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                overflow: 'hidden',
-                background: 'var(--color-bg)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-              }}
-            >
-              {isGenerating ? (
-                <div style={{ textAlign: 'center' }}>
-                  <Spin size="large" />
-                  <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-text-secondary)' }}>
-                    {t('upload.processing')}
-                  </p>
-                </div>
-              ) : processedImageUrl ? (
-                <img
-                  src={processedImageUrl}
-                  alt="Processed"
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain',
-                  }}
-                />
-              ) : (
-                <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                  <p>{hasImageProcessor ? t('upload.clickGenerate') : t('upload.configureFirst')}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      {!isConfirmed ? renderGridSelection() : renderProcessingPreview()}
     </Modal>
   );
 }
