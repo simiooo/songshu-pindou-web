@@ -174,8 +174,14 @@ function getProxiedImageUrl(originalUrl: string): string {
     }
   }
 
-  // 其他外部 URL，返回原 URL
-  return originalUrl;
+  // 其他外部 URL，使用 proxy-image 代理
+  try {
+    new URL(originalUrl);
+    return `/api/proxy-image?url=${encodeURIComponent(originalUrl)}`;
+  } catch {
+    // URL 解析失败，返回原 URL
+    return originalUrl;
+  }
 }
 
 // 检测是否是字节跳动/火山引擎 API

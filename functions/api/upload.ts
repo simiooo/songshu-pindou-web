@@ -17,7 +17,7 @@ const corsHeaders = {
 
 export async function onRequest({ request }: RequestContext): Promise<Response> {
   const url = new URL(request.url);
-  const pathname = url.pathname.replace('/api/upload', '') || '/';
+  const pathname = url.pathname.replace('/api/upload/', '') || '';
 
   const isUploadRequest = request.method === 'POST' || (request.method === 'OPTIONS' && url.searchParams.has('output'));
 

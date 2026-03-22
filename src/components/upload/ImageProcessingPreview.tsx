@@ -134,7 +134,10 @@ export function ImageProcessingPreview({
 
     try {
       // 使用代理获取图片，避免 CORS 问题
-      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(processedImageUrl)}`;
+      // 如果已经是代理 URL，直接使用；否则添加代理前缀
+      const proxyUrl = processedImageUrl.startsWith('/api/')
+        ? processedImageUrl
+        : `/api/proxy-image?url=${encodeURIComponent(processedImageUrl)}`;
       const response = await fetch(proxyUrl);
 
       if (!response.ok) {
