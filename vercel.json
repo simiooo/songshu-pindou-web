@@ -1,22 +1,15 @@
 {
   "rewrites": [
     {
-      "source": "/api/proxy-image",
-      "destination": "/api/proxy-image.js"
-    },
-    {
-      "source": "/api/upload\\?(.*)",
-      "destination": "https://uguu.se/upload?$1"
-    },
-    {
-      "source": "/api/upload/:path*",
-      "destination": "https://uguu.se/:path*"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/upload.ts": {
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/api/upload(.*)",
@@ -36,7 +29,7 @@
       ]
     },
     {
-      "source": "/api/proxy-image",
+      "source": "/api/proxy-image(.*)",
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
