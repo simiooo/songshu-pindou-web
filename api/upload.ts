@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import https from 'https';
 
 export const config = {
   api: {
@@ -73,66 +72,46 @@ async function handleUpload(url: URL, req: VercelRequest, res: VercelResponse) {
     });
   });
 
-  return new Promise<void>((resolve) => {
-    // 构建请求头，模仿 vite proxy 的 changeOrigin: true
-    const requestHeaders: Record<string, string> = {
+  try {
+    // 使用 fetch API 转发请求
+    const headers: Record<string, string> = {
       'Accept': 'application/json',
-      'Host': 'uguu.se',
-      'Origin': 'https://uguu.se',
-      'Referer': 'https://uguu.se/',
     };
     
     // 必须保留原始的 Content-Type，包含 boundary
     const originalContentType = req.headers['content-type'];
     if (originalContentType) {
-      requestHeaders['Content-Type'] = originalContentType;
+      headers['Content-Type'] = originalContentType;
       console.log('[Upload] Using Content-Type:', originalContentType);
     }
     
-    // 设置正确的 Content-Length
-    requestHeaders['Content-Length'] = String(body.length);
+    console.log('[Upload] Sending fetch request to:', targetUrl);
     
-    console.log('[Upload] Request headers:', requestHeaders);
-    
-    const proxyReq = https.request(targetUrl, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: requestHeaders,
-    }, (proxyRes) => {
-      console.log('[Upload] Response status:', proxyRes.statusCode);
-      console.log('[Upload] Response headers:', proxyRes.headers);
-      
-      const chunks: Buffer[] = [];
-      proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
-      proxyRes.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-        const responseBody = buffer.toString('utf-8');
-        console.log('[Upload] Response body:', responseBody.substring(0, 500));
-
-        Object.entries(corsHeaders).forEach(([key, value]) => {
-          res.setHeader(key, value);
-        });
-        res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'application/json');
-        res.status(proxyRes.statusCode || 200).send(buffer);
-        resolve();
-      });
-      proxyRes.on('error', (err) => {
-        console.error('[Upload] Proxy response error:', err);
-        res.status(500).json({ error: err.message });
-        resolve();
-      });
+      headers,
+      body: new Uint8Array(body),
     });
-
-    proxyReq.on('error', (error) => {
-      console.error('[Upload] Proxy request error:', error);
-      res.status(500).json({ error: error.message });
-      resolve();
+    
+    console.log('[Upload] Response status:', response.status);
+    console.log('[Upload] Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    const responseBody = await response.text();
+    console.log('[Upload] Response body:', responseBody.substring(0, 500));
+    
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      res.setHeader(key, value);
     });
-
-    if (body.length > 0) {
-      proxyReq.write(body);
-    }
-    proxyReq.end();
-  });
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+    res.status(response.status).send(responseBody);
+    
+  } catch (error) {
+    console.error('[Upload] Fetch error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
 }
 
 async function handleFileAccess(url: URL, res: VercelResponse) {
@@ -145,35 +124,27 @@ async function handleFileAccess(url: URL, res: VercelResponse) {
 
   const targetUrl = `${UGUU_TARGET}/${filename}`;
 
-  return new Promise<void>((resolve) => {
-    https.get(targetUrl, { method: 'GET' }, (proxyRes) => {
-      if (!proxyRes.statusCode || proxyRes.statusCode > 400) {
-        res.status(404).json({ error: 'File not found' });
-        return resolve();
-      }
-
-      const contentType = proxyRes.headers['content-type'] || 'application/octet-stream';
-      const chunks: Buffer[] = [];
-
-      proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
-      proxyRes.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-
-        Object.entries(corsHeaders).forEach(([key, value]) => {
-          res.setHeader(key, value);
-        });
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=31536000');
-        res.status(200).send(buffer);
-        resolve();
-      });
-      proxyRes.on('error', (err) => {
-        res.status(500).json({ error: err.message });
-        resolve();
-      });
-    }).on('error', (error) => {
-      res.status(500).json({ error: error.message });
-      resolve();
+  try {
+    const response = await fetch(targetUrl);
+    
+    if (!response.ok) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const buffer = await response.arrayBuffer();
+    
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      res.setHeader(key, value);
     });
-  });
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.status(200).send(Buffer.from(buffer));
+    
+  } catch (error) {
+    console.error('[Upload] File access error:', error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
 }
