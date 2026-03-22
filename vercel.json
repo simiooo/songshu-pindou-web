@@ -1,8 +1,16 @@
 {
   "rewrites": [
     {
-      "source": "/api/upload(.*)",
-      "destination": "https://uguu.se/upload$1"
+      "source": "/api/proxy-image",
+      "destination": "/api/proxy-image.js"
+    },
+    {
+      "source": "/api/upload\\?(.*)",
+      "destination": "https://uguu.se/upload?$1"
+    },
+    {
+      "source": "/api/upload/:path*",
+      "destination": "https://uguu.se/:path*"
     },
     {
       "source": "/((?!api/).*)",
@@ -24,6 +32,23 @@
         {
           "key": "Access-Control-Allow-Headers",
           "value": "X-Requested-With, Content-Type, Authorization"
+        }
+      ]
+    },
+    {
+      "source": "/api/proxy-image",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "X-Requested-With, Content-Type"
         }
       ]
     }

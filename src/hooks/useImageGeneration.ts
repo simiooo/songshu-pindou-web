@@ -59,10 +59,23 @@ export const PERLER_BEAD_PROMPT_TEMPLATE = `请将参考图片转换为拼豆（
  * 生成带网格参数的 Prompt
  * @param basePrompt 基础 prompt
  * @param gridSize 网格大小（如 29, 52, 72 等）
+ * @param colorGroup 可选的色号组信息，用于指定可用的颜色范围
  * @returns 包含网格参数的最终 prompt
  */
-export function generateGridPrompt(basePrompt: string, gridSize: number): string {
-  const gridInstruction = `\n\n网格参数要求：\n- 最终图案必须适配 ${gridSize}×${gridSize} 的方形网格\n- 图像应该被划分为 ${gridSize} 行 ${gridSize} 列的网格结构\n- 每个网格单元格代表一颗拼豆，且每个网格内的颜色必须完全相同（纯色填充）\n- 确保图案在 ${gridSize}×${gridSize} 网格内完整呈现，主体居中\n- 考虑网格边界，避免图案被截断\n- 绝对不能生成网格线、边框线或分隔线，颜色块之间只能通过颜色差异区分\n- 背景区域必须是纯色填充，不能有纹理、图案或装饰性元素`;
+export function generateGridPrompt(
+  basePrompt: string,
+  gridSize: number,
+  colorGroup?: { name: string; brand: string; beadSize: string; colorCount: number }
+): string {
+  let gridInstruction = `\n\n网格参数要求：\n- 最终图案必须适配 ${gridSize}×${gridSize} 的方形网格\n- 图像应该被划分为 ${gridSize} 行 ${gridSize} 列的网格结构\n- 每个网格单元格代表一颗拼豆，且每个网格内的颜色必须完全相同（纯色填充）\n- 确保图案在 ${gridSize}×${gridSize} 网格内完整呈现，主体居中\n- 考虑网格边界，避免图案被截断\n- 绝对不能生成网格线、边框线或分隔线，颜色块之间只能通过颜色差异区分\n- 背景区域必须是纯色填充，不能有纹理、图案或装饰性元素`;
+
+  if (colorGroup) {
+    gridInstruction += `\n\n色号组参数要求：\n- 必须使用 ${colorGroup.brand} ${colorGroup.beadSize} 色号组\n- 该色号组共有 ${colorGroup.colorCount} 种颜色可选\n- 颜色数量控制在 ${colorGroup.colorCount} 种以内，必须使用该色号组中实际存在的颜色\n- 不要使用色号组中没有的颜色`;
+
+    if (basePrompt.toLowerCase().includes('perler')) {
+      gridInstruction += `\n\n重要提醒：\n- 绝对不能生成乐高(Lego)风格的凸起积木效果\n- 必须保持拼豆艺术风格：扁平的像素化效果`;
+    }
+  }
 
   return basePrompt ? `${basePrompt}${gridInstruction}` : `${PERLER_BEAD_PROMPT_TEMPLATE}${gridInstruction}`;
 }

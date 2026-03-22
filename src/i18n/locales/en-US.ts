@@ -103,6 +103,7 @@ export default {
     exportAnnotated: 'Export Pattern',
     noData: 'No data',
     beads: 'beads',
+    colors: 'colors',
   },
   llm: {
     title: 'LLM Provider',

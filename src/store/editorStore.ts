@@ -25,6 +25,7 @@ interface EditorStore {
   activeColorGroupId: string;
   showGrid: boolean;
   gridColor: 'dark' | 'light';
+  showColorLabels: boolean;
   projectId: string | null;
   projectName: string;
   isDirty: boolean;
@@ -45,6 +46,7 @@ interface EditorStore {
   pushHistory: (operations: EditorOperation[]) => void;
   toggleGrid: () => void;
   setGridColor: (color: 'dark' | 'light') => void;
+  toggleColorLabels: () => void;
   setColorGroups: (groups: ColorGroup[]) => void;
   setActiveColorGroup: (id: string) => void;
   newProject: () => void;
@@ -81,6 +83,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   activeColorGroupId: 'perler-5mm',
   showGrid: true,
   gridColor: 'dark',
+  showColorLabels: false,
   projectId: null,
   projectName: '未命名项目',
   isDirty: false,
@@ -301,6 +304,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
 
   setGridColor: (color) => set({ gridColor: color }),
+
+  toggleColorLabels: () => set((state) => ({ showColorLabels: !state.showColorLabels })),
 
   setColorGroups: (groups) => set({ colorGroups: groups }),
 

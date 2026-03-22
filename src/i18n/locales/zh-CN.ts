@@ -103,6 +103,7 @@ export default {
     exportAnnotated: '导出色号图',
     noData: '暂无数据',
     beads: '颗拼豆',
+    colors: '色',
   },
   llm: {
     title: 'LLM 提供商',

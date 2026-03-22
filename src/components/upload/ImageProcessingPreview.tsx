@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Modal, Button, Spin, Alert, Input, message } from 'antd';
+import { Modal, Button, Spin, Alert, Input, message, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
-import type { CanvasSize, CanvasData } from '@/types/editor';
+import type { CanvasSize, CanvasData, ColorGroup } from '@/types/editor';
 import { useUploadStore } from '@/store/uploadStore';
 import { useLLMProviderStore } from '@/store/llmProviderStore';
+import { useEditorStore } from '@/store/editorStore';
 import { useImageGeneration, generateGridPrompt, isVolcesAPI, calculateImageSize } from '@/hooks/useImageGeneration';
 import { SettingOutlined, ReloadOutlined } from '@ant-design/icons';
 
@@ -30,15 +31,19 @@ export function ImageProcessingPreview({
   onOpenSettings,
 }: ImageProcessingPreviewProps) {
   const { t } = useTranslation();
-  const { setPixelationCanvasSize } = useUploadStore();
+  const { setPixelationCanvasSize, selectedColorGroupId, setSelectedColorGroupId } = useUploadStore();
   const { getImageProcessor } = useLLMProviderStore();
   const { generateImage, isGenerating } = useImageGeneration();
+  const { colorGroups } = useEditorStore();
 
   const [prompt, setPrompt] = useState('');
   const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [selectedGridSize, setSelectedGridSize] = useState<CanvasSize | null>(null);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+
+  const activeColorGroup = colorGroups.find((g) => g.id === selectedColorGroupId) || colorGroups[0];
 
   const imageProcessor = getImageProcessor();
   const hasImageProcessor = !!imageProcessor;
@@ -51,10 +56,11 @@ export function ImageProcessingPreview({
       setProcessingError(null);
       setSelectedGridSize(null);
       setIsConfirmed(false);
+      setIsApplying(false);
     }
   }, [open]);
 
-  const performGeneration = useCallback(async (userPrompt: string, gridSize: CanvasSize) => {
+  const performGeneration = useCallback(async (userPrompt: string, gridSize: CanvasSize, colorGroup: ColorGroup) => {
     if (!imageProcessor || isGenerating) return;
 
     setProcessingError(null);
@@ -63,8 +69,13 @@ export function ImageProcessingPreview({
       // 检测是否是字节跳动 API
       const isVolces = isVolcesAPI(imageProcessor.baseUrl || '');
 
-      // 构建带网格参数的最终 prompt
-      const finalPrompt = generateGridPrompt(userPrompt, gridSize);
+      // 构建带网格参数的最终 prompt，包含色号组信息
+      const finalPrompt = generateGridPrompt(userPrompt, gridSize, {
+        name: colorGroup.name,
+        brand: colorGroup.brand,
+        beadSize: colorGroup.beadSize,
+        colorCount: colorGroup.colors.length,
+      });
 
       // 根据原图比例自动计算尺寸
       const size = calculateImageSize(imageWidth, imageHeight, isVolces);
@@ -105,19 +116,21 @@ export function ImageProcessingPreview({
       setIsConfirmed(true);
       // 自动开始生成
       if (hasImageProcessor) {
-        void performGeneration(prompt, selectedGridSize);
+        void performGeneration(prompt, selectedGridSize, activeColorGroup);
       }
     }
-  }, [selectedGridSize, hasImageProcessor, prompt, performGeneration]);
+  }, [selectedGridSize, hasImageProcessor, prompt, performGeneration, activeColorGroup]);
 
   const handleGenerate = useCallback(() => {
     if (selectedGridSize) {
-      void performGeneration(prompt, selectedGridSize);
+      void performGeneration(prompt, selectedGridSize, activeColorGroup);
     }
-  }, [prompt, selectedGridSize, performGeneration]);
+  }, [prompt, selectedGridSize, performGeneration, activeColorGroup]);
 
   const handleConfirm = useCallback(async () => {
     if (!processedImageUrl || !selectedGridSize) return;
+
+    setIsApplying(true);
 
     try {
       // 使用代理获取图片，避免 CORS 问题
@@ -142,6 +155,7 @@ export function ImageProcessingPreview({
         if (!ctx) {
           message.error(t('upload.processingFailed'));
           URL.revokeObjectURL(blobUrl);
+          setIsApplying(false);
           return;
         }
 
@@ -186,17 +200,20 @@ export function ImageProcessingPreview({
 
         // Clean up blob URL
         URL.revokeObjectURL(blobUrl);
+        setIsApplying(false);
         onConfirm(canvasData, selectedGridSize);
       };
 
       img.onerror = () => {
         message.error(t('upload.processingFailed'));
         URL.revokeObjectURL(blobUrl);
+        setIsApplying(false);
       };
 
       img.src = blobUrl;
     } catch {
       message.error(t('upload.processingFailed'));
+      setIsApplying(false);
     }
   }, [processedImageUrl, selectedGridSize, onConfirm, t]);
 
@@ -209,6 +226,32 @@ export function ImageProcessingPreview({
       <p style={{ marginBottom: 'var(--space-lg)', color: 'var(--color-text-secondary)' }}>
         {t('upload.gridSizeDescription') || '选择拼豆画布的网格尺寸，这将决定最终图案的精细程度'}
       </p>
+
+      {/* 色号组选择 */}
+      <div style={{
+        display: 'flex',
+        gap: 'var(--space-md)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 'var(--space-lg)',
+        flexWrap: 'wrap',
+      }}>
+        <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          {t('color.colorGroup') || '色号组'}:
+        </span>
+        <Select
+          value={selectedColorGroupId}
+          onChange={(value) => {
+            setSelectedColorGroupId(value);
+          }}
+          style={{ minWidth: 200 }}
+          options={colorGroups.map((group) => ({
+            value: group.id,
+            label: `${group.name} (${group.brand} ${group.beadSize}) - ${group.colors.length} ${t('pixelation.colors') || '色'}`
+          }))}
+        />
+      </div>
+
       <div style={{
         display: 'flex',
         gap: 'var(--space-md)',
@@ -450,19 +493,20 @@ export function ImageProcessingPreview({
       onCancel={onCancel}
       width={800}
       footer={isConfirmed ? [
-        <Button key="cancel" onClick={onCancel}>
+        <Button key="cancel" onClick={onCancel} disabled={isApplying}>
           {t('common.cancel')}
         </Button>,
         <Button
           key="confirm"
           type="primary"
           onClick={handleConfirm}
-          disabled={!processedImageUrl || isGenerating}
+          disabled={!processedImageUrl || isGenerating || isApplying}
+          loading={isApplying}
         >
           {t('upload.applyToCanvas')}
         </Button>,
       ] : [
-        <Button key="cancel" onClick={onCancel}>
+        <Button key="cancel" onClick={onCancel} disabled={isApplying}>
           {t('common.cancel')}
         </Button>,
       ]}

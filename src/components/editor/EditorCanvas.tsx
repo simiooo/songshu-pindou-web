@@ -3,15 +3,17 @@ import { useKeyPress, useEventListener } from 'ahooks';
 import { useEditorStore } from '@/store/editorStore';
 import { useUIStore } from '@/store/uiStore';
 import type { EditorOperation } from '@/types/editor';
+import { findClosestColor } from '@/utils/colorMatching';
 
 interface EditorCanvasProps {
   showGrid: boolean;
   gridColor: 'dark' | 'light';
+  showColorLabels: boolean;
 }
 
 const PIXEL_SIZE = 12;
 
-export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
+export function EditorCanvas({ showGrid, gridColor, showColorLabels }: EditorCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentOperations, setCurrentOperations] = useState<EditorOperation[]>([]);
@@ -36,6 +38,8 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     setZoomLevel,
     setPanOffset,
     selection,
+    colorGroups,
+    activeColorGroupId,
   } = useEditorStore();
 
   const { theme } = useUIStore();
@@ -178,6 +182,10 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
   const isDark = theme === 'dark';
   const canvasBackground = isDark ? '#1a1a1a' : '#ffffff';
 
+  const activeColorGroup = useMemo(() => {
+    return colorGroups.find((g) => g.id === activeColorGroupId) || colorGroups[0];
+  }, [colorGroups, activeColorGroupId]);
+
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -215,6 +223,32 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
       }
     }
 
+    if (showColorLabels) {
+      ctx.font = `${Math.max(6, PIXEL_SIZE / 3)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      for (let y = 0; y < canvasSize; y++) {
+        for (let x = 0; x < canvasSize; x++) {
+          const pixel = canvasData[y]?.[x];
+          if (pixel?.filled && pixel.color && activeColorGroup) {
+            const matched = findClosestColor(pixel.color, activeColorGroup.colors);
+            const textX = x * PIXEL_SIZE + PIXEL_SIZE / 2;
+            const textY = y * PIXEL_SIZE + PIXEL_SIZE / 2;
+
+            const r = parseInt(pixel.color.slice(1, 3), 16);
+            const g = parseInt(pixel.color.slice(3, 5), 16);
+            const b = parseInt(pixel.color.slice(5, 7), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            ctx.fillStyle = luminance > 0.5 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)';
+
+            const shortCode = matched.code.length > 4 ? matched.code.slice(-4) : matched.code;
+            ctx.fillText(shortCode, textX, textY);
+          }
+        }
+      }
+    }
+
     if (showGrid) {
       const gridStroke = isDark ? 'rgba(255,255,255,0.15)' : (gridColor === 'dark' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.3)');
       ctx.strokeStyle = gridStroke;
@@ -234,7 +268,7 @@ export function EditorCanvas({ showGrid, gridColor }: EditorCanvasProps) {
     }
 
     ctx.restore();
-  }, [canvasData, canvasSize, canvasWidth, canvasHeight, showGrid, gridColor, zoomLevel, logicalWidth, logicalHeight, dpr, canvasBackground, isDark]);
+  }, [canvasData, canvasSize, canvasWidth, canvasHeight, showGrid, gridColor, showColorLabels, zoomLevel, logicalWidth, logicalHeight, dpr, canvasBackground, isDark, activeColorGroup]);
 
   useEffect(() => {
     const render = () => {

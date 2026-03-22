@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { EditorCanvas } from '@/components/editor/EditorCanvas';
 import { ColorPalette } from '@/components/editor/ColorPalette';
 import { CanvasSizeSelector } from '@/components/editor/CanvasSizeSelector';
+import { FloatingToolbar } from '@/components/editor/Toolbar';
 import { ImageProcessingPreview } from '@/components/upload/ImageProcessingPreview';
 import { LLMProviderManager } from '@/components/llm/LLMProviderManager';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -13,6 +14,7 @@ import { useUploadStore } from '@/store/uploadStore';
 import { useUIStore } from '@/store/uiStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { ExportModal } from '@/components/editor/ExportModal';
+import { countBeadsByColor } from '@/utils/exportUtils';
 import { getTheme } from '@/theme';
 import { CANVAS_SIZES } from '@/constants/colorGroups';
 import type { CanvasData, CanvasSize, EditorTool } from '@/types/editor';
@@ -351,6 +353,7 @@ export function EditorPage() {
     loadCanvas,
     colorGroups,
     activeColorGroupId,
+    showColorLabels,
   } = useEditorStore();
 
   const { status, importedImage, reset: resetUpload, setImportedImage, setStatus: setUploadStatus } = useUploadStore();
@@ -359,6 +362,8 @@ export function EditorPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [showColorPalette, setShowColorPalette] = useState(true);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showReuploadModal, setShowReuploadModal] = useState(false);
+  const [reuploadImage, setReuploadImage] = useState<{ dataUrl: string; width: number; height: number } | null>(null);
 
   const hasImage = useMemo(() => {
     return canvasData.some((row) => row.some((pixel) => pixel.filled));
@@ -367,6 +372,15 @@ export function EditorPage() {
   const activeColorGroup = useMemo(() => {
     return colorGroups.find((g) => g.id === activeColorGroupId) || colorGroups[0];
   }, [colorGroups, activeColorGroupId]);
+
+  const colorStats = useMemo(() => {
+    if (!hasImage || !activeColorGroup) return [];
+    return countBeadsByColor(canvasData, canvasSize, activeColorGroup);
+  }, [canvasData, canvasSize, activeColorGroup, hasImage]);
+
+  const totalBeads = useMemo(() => {
+    return colorStats.reduce((sum, c) => sum + c.count, 0);
+  }, [colorStats]);
 
   const handleFileUpload = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -412,15 +426,53 @@ export function EditorPage() {
 
   const handlePixelationConfirm = useCallback((pixelData: CanvasData, size: CanvasSize) => {
     loadCanvas(pixelData, size);
-    resetUpload();
+    if (reuploadImage) {
+      setReuploadImage(null);
+      setShowReuploadModal(false);
+    } else {
+      resetUpload();
+    }
     message.success(t('upload.imageLoaded'));
-  }, [loadCanvas, resetUpload, t]);
+  }, [loadCanvas, resetUpload, t, reuploadImage]);
 
   const handlePixelationCancel = useCallback(() => {
-    resetUpload();
-  }, [resetUpload]);
+    if (reuploadImage) {
+      setReuploadImage(null);
+      setShowReuploadModal(false);
+    } else {
+      resetUpload();
+    }
+  }, [resetUpload, reuploadImage]);
 
-  const showPixelationModal = status === 'ready' && importedImage !== null;
+  const handleReupload = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) {
+      message.error(t('upload.invalidFile'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        setReuploadImage({
+          dataUrl,
+          width: img.width,
+          height: img.height,
+        });
+        setShowReuploadModal(true);
+      };
+      img.onerror = () => {
+        message.error(t('upload.uploadFailed'));
+      };
+      img.src = dataUrl;
+    };
+    reader.onerror = () => {
+      message.error(t('upload.uploadFailed'));
+    };
+    reader.readAsDataURL(file);
+  }, [t]);
+
+  const showPixelationModal = (status === 'ready' && importedImage !== null) || (showReuploadModal && reuploadImage !== null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -512,10 +564,76 @@ export function EditorPage() {
                     overflow: 'auto',
                     background: currentTheme === 'dark' ? '#2a2a2a' : '#e8e8e8',
                     padding: isMobile ? 8 : 24,
+                    position: 'relative',
                   }}
                 >
                   {hasImage ? (
-                    <EditorCanvas showGrid={showGrid} gridColor={gridColor} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-md)' }}>
+                      <div style={{ position: 'relative' }}>
+                        <FloatingToolbar position="top-left" onUpload={handleReupload} />
+                        <EditorCanvas showGrid={showGrid} gridColor={gridColor} showColorLabels={showColorLabels} />
+                      </div>
+                      {colorStats.length > 0 && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--space-md)',
+                            padding: 'var(--space-sm) var(--space-md)',
+                            background: 'var(--color-bg)',
+                            borderRadius: 'var(--radius-md)',
+                            boxShadow: 'var(--shadow-sm)',
+                            maxWidth: '100%',
+                            overflowX: 'auto',
+                          }}
+                        >
+                          <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                            {t('pixelation.colorStats') || '色号统计'}:
+                          </span>
+                          <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {colorStats.slice(0, 12).map((stat) => (
+                              <Tooltip key={stat.code} title={`${stat.code} ${stat.name}: ${stat.count} ${t('pixelation.beads')}`}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '2px 6px',
+                                    background: 'var(--color-bg-secondary)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    fontSize: 11,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                      borderRadius: 2,
+                                      background: stat.hex,
+                                      border: '1px solid var(--color-border-light)',
+                                    }}
+                                  />
+                                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>
+                                    {stat.code}
+                                  </span>
+                                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                                    ×{stat.count}
+                                  </span>
+                                </div>
+                              </Tooltip>
+                            ))}
+                            {colorStats.length > 12 && (
+                              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                                +{colorStats.length - 12} {t('color.colors') || '色'}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+                            {t('common.total')}: {totalBeads} {t('pixelation.beads')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <Upload
                       accept="image/*"
@@ -671,9 +789,9 @@ export function EditorPage() {
 
         <ImageProcessingPreview
           open={showPixelationModal}
-          imageUrl={importedImage?.dataUrl || ''}
-          imageWidth={importedImage?.width || 0}
-          imageHeight={importedImage?.height || 0}
+          imageUrl={(reuploadImage || importedImage)?.dataUrl || ''}
+          imageWidth={(reuploadImage || importedImage)?.width || 0}
+          imageHeight={(reuploadImage || importedImage)?.height || 0}
           onConfirm={handlePixelationConfirm}
           onCancel={handlePixelationCancel}
           onOpenSettings={() => setShowSettingsModal(true)}
