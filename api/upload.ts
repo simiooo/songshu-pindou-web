@@ -74,20 +74,38 @@ async function handleUpload(url: URL, req: VercelRequest, res: VercelResponse) {
   });
 
   return new Promise<void>((resolve) => {
+    // 构建请求头，保留原始的 Content-Type（包含 boundary）
+    const requestHeaders: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    
+    // 必须保留原始的 Content-Type，包含 boundary
+    const originalContentType = req.headers['content-type'];
+    if (originalContentType) {
+      requestHeaders['Content-Type'] = originalContentType;
+      console.log('[Upload] Using Content-Type:', originalContentType);
+    }
+    
+    // 保留其他重要头部
+    if (req.headers['content-length']) {
+      requestHeaders['Content-Length'] = String(body.length);
+    }
+    
+    console.log('[Upload] Request headers:', requestHeaders);
+    
     const proxyReq = https.request(targetUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': req.headers['content-type'] || 'multipart/form-data',
-        'Accept': 'application/json',
-      },
+      headers: requestHeaders,
     }, (proxyRes) => {
       console.log('[Upload] Response status:', proxyRes.statusCode);
+      console.log('[Upload] Response headers:', proxyRes.headers);
       
       const chunks: Buffer[] = [];
       proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
       proxyRes.on('end', () => {
         const buffer = Buffer.concat(chunks);
-        console.log('[Upload] Response body length:', buffer.length);
+        const responseBody = buffer.toString('utf-8');
+        console.log('[Upload] Response body:', responseBody.substring(0, 500));
 
         Object.entries(corsHeaders).forEach(([key, value]) => {
           res.setHeader(key, value);
