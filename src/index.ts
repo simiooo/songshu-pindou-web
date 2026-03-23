@@ -1,9 +1,6 @@
+import { corsHeaders, jsonResponse, errorResponse, validateUrl, getFilenameFromUrl } from './lib/proxy';
+
 const UGUU_TARGET = 'https://uguu.se';
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -14,10 +11,10 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/upload')) {
-      return handleUpload(request);
+      return handleUpload(url, request);
     }
 
-    return new Response('Not Found', { status: 404 });
+    return jsonResponse({ error: 'Not found' }, 404);
   },
 };
 
@@ -25,21 +22,14 @@ async function handleProxyImage(url: URL): Promise<Response> {
   const targetUrl = url.searchParams.get('url');
 
   if (!targetUrl) {
-    return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return errorResponse('Missing url parameter', 400);
   }
 
-  let decodedUrl: string;
-  try {
-    decodedUrl = decodeURIComponent(targetUrl);
-    new URL(decodedUrl);
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid url parameter' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+  const decodedUrl = decodeURIComponent(targetUrl);
+  const parsedUrl = validateUrl(decodedUrl);
+
+  if (!parsedUrl) {
+    return errorResponse('Invalid url parameter', 400);
   }
 
   try {
@@ -51,10 +41,7 @@ async function handleProxyImage(url: URL): Promise<Response> {
     });
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ error: `Failed to fetch image: ${response.status}` }), {
-        status: response.status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+      return errorResponse(`Failed to fetch image: ${response.status}`, response.status);
     }
 
     const contentType = response.headers.get('Content-Type') || 'image/png';
@@ -69,16 +56,11 @@ async function handleProxyImage(url: URL): Promise<Response> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return errorResponse(message, 500);
   }
 }
 
-async function handleUpload(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-
+async function handleUpload(url: URL, request: Request): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -121,36 +103,24 @@ async function handleUploadRequest(url: URL, request: Request): Promise<Response
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Upload failed';
-    return new Response(JSON.stringify({ success: false, error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return errorResponse(message, 500);
   }
 }
 
 async function handleFileAccess(url: URL): Promise<Response> {
-  const pathname = url.pathname.replace('/api/upload', '');
-  const filename = pathname.replace(/^\/+/, '');
+  const filename = getFilenameFromUrl(url, '/api/upload');
 
   if (!filename) {
-    return new Response(JSON.stringify({ error: 'Missing filename' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return errorResponse('Missing filename', 400);
   }
 
   const targetUrl = `${UGUU_TARGET}/${filename}`;
 
   try {
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-    });
+    const response = await fetch(targetUrl, { method: 'GET' });
 
     if (!response.ok && response.status !== 302 && response.status !== 301) {
-      return new Response(JSON.stringify({ error: 'File not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+      return errorResponse('File not found', 404);
     }
 
     const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
@@ -165,9 +135,6 @@ async function handleFileAccess(url: URL): Promise<Response> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch file';
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return errorResponse(message, 500);
   }
 }
