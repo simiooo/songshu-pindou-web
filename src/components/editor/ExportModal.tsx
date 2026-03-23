@@ -43,7 +43,7 @@ export function ExportModal({
   onClose,
 }: ExportModalProps) {
   const { t } = useTranslation();
-  const [selectedExports, setSelectedExports] = useState<string[]>(['pattern', 'colorCodes', 'materials']);
+  const [selectedExports, setSelectedExports] = useState<string[]>(['colorCodes']);
   const [isExporting, setIsExporting] = useState(false);
 
   const exportOptions = [
