@@ -18,8 +18,8 @@ interface ImageProcessingPreviewProps {
   onOpenSettings: () => void;
 }
 
-// 可用的网格尺寸选项
-const GRID_SIZES = [29, 52, 72, 104, 156, 200] as const;
+// 可用的网格尺寸选项 - 精简为3种主流尺寸
+const GRID_SIZES = [29, 52, 72] as const;
 
 export function ImageProcessingPreview({
   open,
@@ -304,14 +304,11 @@ export function ImageProcessingPreview({
             >
               <div>
                 <div style={{ fontWeight: 'bold' }}>{size}×{size}</div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  {size === 29 && (t('upload.gridSizeSmall') || '小型')}
-                  {size === 52 && (t('upload.gridSizeMedium') || '中型')}
-                  {size === 72 && (t('upload.gridSizeLarge') || '大型')}
-                  {size === 104 && (t('upload.gridSizeXLarge') || '超大型')}
-                  {size === 156 && (t('upload.gridSizeXXLarge') || '特大')}
-                  {size === 200 && (t('upload.gridSizeHuge') || '巨大')}
-                </div>
+                   <div style={{ fontSize: 12, opacity: 0.7 }}>
+                   {size === 29 && (t('upload.gridSizeSmall') || '迷你')}
+                   {size === 52 && (t('upload.gridSizeMedium') || '中型')}
+                   {size === 72 && (t('upload.gridSizeLarge') || '大型')}
+                 </div>
               </div>
             </Button>
           ))}

@@ -47,7 +47,7 @@ export const useUploadStore = create<UploadStore>((set, get) => ({
   importedImage: null,
   error: null,
   pixelationCanvasSize: 52,
-  selectedColorGroupId: 'perler-5mm',
+  selectedColorGroupId: 'perler-223',
   enableDithering: true,
   cropRegion: null,
   zoomLevel: 1,

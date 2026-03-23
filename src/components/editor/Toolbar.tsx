@@ -109,32 +109,35 @@ export function FloatingToolbar({ position = 'top-left', onUpload }: FloatingToo
     icon: React.ReactNode;
     label: string;
     shortcut: string;
-    hint?: string;
+    hint: string;
   }[] = [
     {
       key: 'brush',
       icon: <EditOutlined />,
       label: t('editor.brush'),
       shortcut: t('shortcuts.brush'),
+      hint: t('editor.brushHint') || '点击绘制单个拼豆',
     },
     {
       key: 'eraser',
       icon: <DeleteOutlined />,
       label: t('editor.eraser'),
       shortcut: t('shortcuts.eraser'),
+      hint: t('editor.eraserHint') || '擦除拼豆，恢复空白',
     },
     {
       key: 'fill',
       icon: <BgColorsOutlined />,
       label: t('editor.fill'),
       shortcut: t('shortcuts.fill'),
+      hint: t('editor.fillHint') || '填充连续同色区域',
     },
     {
       key: 'selection',
       icon: <BorderOutlined />,
       label: t('editor.selection'),
       shortcut: t('shortcuts.selection'),
-      hint: t('editor.selectionHint'),
+      hint: t('editor.selectionHint') || '拖拽框选区域',
     },
   ];
 
@@ -180,11 +183,7 @@ export function FloatingToolbar({ position = 'top-left', onUpload }: FloatingToo
         <ToolButton
           key={tool.key}
           icon={tool.icon}
-          tooltip={
-            tool.hint
-              ? `${tool.label} (${tool.shortcut}) - ${tool.hint}`
-              : `${tool.label} (${tool.shortcut})`
-          }
+          tooltip={`${tool.label} (${tool.shortcut}) - ${tool.hint}`}
           onClick={() => setTool(tool.key)}
           active={currentTool === tool.key}
         />

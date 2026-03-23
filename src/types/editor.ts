@@ -1,7 +1,7 @@
 // ========== 画布相关类型 ==========
 
 /** 画布尺寸选项 (单位: 颗粒数) */
-export type CanvasSize = 29 | 36 | 52 | 72 | 104 | 156 | 200;
+export type CanvasSize = 29 | 52 | 72;
 
 /** 单个像素颜色数据 */
 export interface PixelData {
