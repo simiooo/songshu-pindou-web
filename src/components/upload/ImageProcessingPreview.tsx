@@ -31,7 +31,7 @@ export function ImageProcessingPreview({
   onOpenSettings,
 }: ImageProcessingPreviewProps) {
   const { t } = useTranslation();
-  const { setPixelationCanvasSize, selectedColorGroupId, setSelectedColorGroupId } = useUploadStore();
+  const { setPixelationCanvasSize, selectedColorGroupId, setSelectedColorGroupId, cacheAIImage, cacheCanvasData } = useUploadStore();
   const { getImageProcessor } = useLLMProviderStore();
   const { generateImage, isGenerating } = useImageGeneration();
   const { colorGroups } = useEditorStore();
@@ -99,27 +99,26 @@ export function ImageProcessingPreview({
 
       if (result?.imageUrl) {
         setProcessedImageUrl(result.imageUrl);
+        // 缓存AI生成的图片（不包含gridSize，这样可以用同一张图重新处理成不同尺寸）
+        const cacheKey = `${imageUrl}-${colorGroup.id}`;
+        cacheAIImage(cacheKey, result.imageUrl, gridSize);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : t('upload.processingFailed');
       setProcessingError(errorMessage);
     }
-  }, [generateImage, imageProcessor, imageUrl, imageWidth, imageHeight, t, isGenerating]);
+  }, [generateImage, imageProcessor, imageUrl, imageWidth, imageHeight, t, isGenerating, cacheAIImage]);
 
   const handleGridSizeSelect = useCallback((size: CanvasSize) => {
     setSelectedGridSize(size);
     setPixelationCanvasSize(size);
-  }, [setPixelationCanvasSize]);
-
-  const handleConfirmGridSize = useCallback(() => {
-    if (selectedGridSize) {
-      setIsConfirmed(true);
-      // 自动开始生成
-      if (hasImageProcessor) {
-        void performGeneration(prompt, selectedGridSize, activeColorGroup);
-      }
+    // 选择尺寸后直接进入处理预览界面
+    setIsConfirmed(true);
+    // 自动开始生成
+    if (hasImageProcessor && imageProcessor) {
+      void performGeneration(prompt, size, activeColorGroup);
     }
-  }, [selectedGridSize, hasImageProcessor, prompt, performGeneration, activeColorGroup]);
+  }, [setPixelationCanvasSize, hasImageProcessor, imageProcessor, prompt, performGeneration, activeColorGroup]);
 
   const handleGenerate = useCallback(() => {
     if (selectedGridSize) {
@@ -204,6 +203,8 @@ export function ImageProcessingPreview({
         // Clean up blob URL
         URL.revokeObjectURL(blobUrl);
         setIsApplying(false);
+        // 缓存canvas数据供后处理使用
+        cacheCanvasData(canvasData, selectedGridSize, imageUrl);
         onConfirm(canvasData, selectedGridSize);
       };
 
@@ -218,7 +219,7 @@ export function ImageProcessingPreview({
       message.error(t('upload.processingFailed'));
       setIsApplying(false);
     }
-  }, [processedImageUrl, selectedGridSize, onConfirm, t]);
+  }, [processedImageUrl, selectedGridSize, onConfirm, t, cacheCanvasData, imageUrl]);
 
   // 渲染网格尺寸选择界面
   const renderGridSelection = () => (
@@ -267,46 +268,55 @@ export function ImageProcessingPreview({
       </div>
 
       <div style={{
-        display: 'flex',
-        gap: 'var(--space-md)',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        marginBottom: 'var(--space-xl)'
+        marginBottom: 'var(--space-xl)',
+        padding: 'var(--space-md)',
+        background: 'var(--color-bg-secondary)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--color-border)',
       }}>
-        {GRID_SIZES.map((size) => (
-          <Button
-            key={size}
-            type={selectedGridSize === size ? 'primary' : 'default'}
-            onClick={() => handleGridSizeSelect(size as CanvasSize)}
-            size="large"
-            style={{
-              minWidth: 100,
-              height: 60,
-              fontSize: 16,
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 'bold' }}>{size}×{size}</div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                {size === 29 && (t('upload.gridSizeSmall') || '小型')}
-                {size === 52 && (t('upload.gridSizeMedium') || '中型')}
-                {size === 72 && (t('upload.gridSizeLarge') || '大型')}
-                {size === 104 && (t('upload.gridSizeXLarge') || '超大型')}
-                {size === 156 && (t('upload.gridSizeXXLarge') || '特大')}
-                {size === 200 && (t('upload.gridSizeHuge') || '巨大')}
+        <div style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--color-text-secondary)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: 'var(--space-sm)',
+        }}>
+          {t('upload.gridSizeLabel') || '画布尺寸'}
+        </div>
+        <div style={{
+          display: 'flex',
+          gap: 'var(--space-md)',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+        }}>
+          {GRID_SIZES.map((size) => (
+            <Button
+              key={size}
+              type={selectedGridSize === size ? 'primary' : 'default'}
+              onClick={() => handleGridSizeSelect(size as CanvasSize)}
+              size="large"
+              style={{
+                minWidth: 100,
+                height: 60,
+                fontSize: 16,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 'bold' }}>{size}×{size}</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {size === 29 && (t('upload.gridSizeSmall') || '小型')}
+                  {size === 52 && (t('upload.gridSizeMedium') || '中型')}
+                  {size === 72 && (t('upload.gridSizeLarge') || '大型')}
+                  {size === 104 && (t('upload.gridSizeXLarge') || '超大型')}
+                  {size === 156 && (t('upload.gridSizeXXLarge') || '特大')}
+                  {size === 200 && (t('upload.gridSizeHuge') || '巨大')}
+                </div>
               </div>
-            </div>
-          </Button>
-        ))}
+            </Button>
+          ))}
+        </div>
       </div>
-      <Button
-        type="primary"
-        size="large"
-        onClick={handleConfirmGridSize}
-        disabled={!selectedGridSize}
-      >
-        {t('upload.confirmGridSize') || '确认并开始生成'}
-      </Button>
     </div>
   );
 
@@ -365,19 +375,19 @@ export function ImageProcessingPreview({
           {t('upload.selectedGridSize') || '已选网格尺寸'}:
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-          <span style={{ fontWeight: 'bold', fontSize: 16 }}>
-            {selectedGridSize}×{selectedGridSize}
-          </span>
-          <Button
-            size="small"
-            onClick={() => {
-              setIsConfirmed(false);
-              setProcessedImageUrl(null);
-              setProcessingError(null);
+          <Select
+            value={selectedGridSize!}
+            onChange={(value) => {
+              setSelectedGridSize(value);
+              setPixelationCanvasSize(value);
             }}
-          >
-            {t('upload.changeGridSize') || '修改'}
-          </Button>
+            size="small"
+            style={{ width: 120 }}
+            options={GRID_SIZES.map((size) => ({
+              value: size,
+              label: `${size}×${size}`,
+            }))}
+          />
         </div>
       </div>
 

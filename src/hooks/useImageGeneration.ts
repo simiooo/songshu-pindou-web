@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { LLMProvider } from '@/types/editor';
+import type { LLMProvider, CanvasData } from '@/types/editor';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -433,3 +433,93 @@ export function useImageGeneration() {
 }
 
 export { generateImageWithProvider };
+
+/**
+ * 将图片URL转换为CanvasData（后处理，不涉及AI）
+ * @param imageUrl 图片URL
+ * @param gridSize 网格尺寸
+ * @returns Promise<CanvasData>
+ */
+export async function processImageToCanvasData(
+  imageUrl: string,
+  gridSize: number
+): Promise<CanvasData> {
+  // 使用代理获取图片，避免 CORS 问题
+  const proxyUrl = imageUrl.startsWith('/api/')
+    ? imageUrl
+    : `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
+
+  const response = await fetch(proxyUrl);
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch image through proxy');
+  }
+
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        URL.revokeObjectURL(blobUrl);
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+
+      // 绘制原图
+      ctx.drawImage(img, 0, 0);
+
+      // 获取完整图像数据
+      const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      const canvasData: CanvasData = [];
+
+      // 将原图划分为 gridSize x gridSize 的网格，每个网格取中心点像素
+      const cellWidth = img.width / gridSize;
+      const cellHeight = img.height / gridSize;
+
+      for (let gridY = 0; gridY < gridSize; gridY++) {
+        const row: { color: string | null; filled: boolean }[] = [];
+        for (let gridX = 0; gridX < gridSize; gridX++) {
+          // 计算该网格单元中心点在原图中的坐标
+          const centerX = Math.floor(gridX * cellWidth + cellWidth / 2);
+          const centerY = Math.floor(gridY * cellHeight + cellHeight / 2);
+
+          // 确保坐标在有效范围内
+          const safeX = Math.min(centerX, img.width - 1);
+          const safeY = Math.min(centerY, img.height - 1);
+
+          // 读取中心点像素
+          const idx = (safeY * img.width + safeX) * 4;
+          const r = imageData.data[idx];
+          const g = imageData.data[idx + 1];
+          const b = imageData.data[idx + 2];
+          const a = imageData.data[idx + 3];
+
+          const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+
+          row.push({
+            color: a > 128 ? hex : null,
+            filled: a > 128,
+          });
+        }
+        canvasData.push(row);
+      }
+
+      URL.revokeObjectURL(blobUrl);
+      resolve(canvasData);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+      reject(new Error('Failed to load image'));
+    };
+
+    img.src = blobUrl;
+  });
+}

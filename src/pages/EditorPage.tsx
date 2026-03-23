@@ -356,7 +356,7 @@ export function EditorPage() {
     showColorLabels,
   } = useEditorStore();
 
-  const { status, importedImage, reset: resetUpload, setImportedImage, setStatus: setUploadStatus } = useUploadStore();
+  const { status, importedImage, resetUploadOnly, setImportedImage, setStatus: setUploadStatus } = useUploadStore();
   const { theme: currentTheme } = useUIStore();
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -430,19 +430,19 @@ export function EditorPage() {
       setReuploadImage(null);
       setShowReuploadModal(false);
     } else {
-      resetUpload();
+      resetUploadOnly();
     }
     message.success(t('upload.imageLoaded'));
-  }, [loadCanvas, resetUpload, t, reuploadImage]);
+  }, [loadCanvas, resetUploadOnly, t, reuploadImage]);
 
   const handlePixelationCancel = useCallback(() => {
     if (reuploadImage) {
       setReuploadImage(null);
       setShowReuploadModal(false);
     } else {
-      resetUpload();
+      resetUploadOnly();
     }
-  }, [resetUpload, reuploadImage]);
+  }, [resetUploadOnly, reuploadImage]);
 
   const handleReupload = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -701,7 +701,7 @@ export function EditorPage() {
                         borderBottom: '1px solid var(--color-border-light)',
                       }}
                     >
-                      <CanvasSizeSelector />
+                      <CanvasSizeSelector enableReprocess={true} />
                     </div>
 
                     <div
