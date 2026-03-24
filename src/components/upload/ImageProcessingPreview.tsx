@@ -1,12 +1,48 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Modal, Button, Spin, Alert, Input, message, Select } from 'antd';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  Modal,
+  Button,
+  Spin,
+  Alert,
+  Input,
+  message,
+  Select,
+  Card,
+  Row,
+  Col,
+  Typography,
+  Empty,
+  Image,
+  Flex,
+  Badge,
+  Divider,
+  Segmented,
+  ConfigProvider,
+  Form,
+} from 'antd';
+import {
+  SettingOutlined,
+  ReloadOutlined,
+  PictureOutlined,
+  CheckCircleOutlined,
+  EditOutlined,
+  RobotOutlined,
+  AppstoreOutlined,
+  AimOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { CanvasSize, CanvasData, ColorGroup } from '@/types/editor';
 import { useUploadStore } from '@/store/uploadStore';
 import { useLLMProviderStore } from '@/store/llmProviderStore';
 import { useEditorStore } from '@/store/editorStore';
-import { useImageGeneration, generateGridPrompt, isVolcesAPI, calculateImageSize } from '@/hooks/useImageGeneration';
-import { SettingOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  useImageGeneration,
+  generateGridPrompt,
+  isVolcesAPI,
+  calculateImageSize,
+} from '@/hooks/useImageGeneration';
+
+const { Title, Text } = Typography;
 
 interface ImageProcessingPreviewProps {
   open: boolean;
@@ -18,8 +54,18 @@ interface ImageProcessingPreviewProps {
   onOpenSettings: () => void;
 }
 
-// 可用的网格尺寸选项 - 精简为3种主流尺寸
 const GRID_SIZES = [29, 52, 72] as const;
+
+const sizeLabels: Record<number, { label: string; desc: string }> = {
+  29: { label: '29×29', desc: '迷你' },
+  52: { label: '52×52', desc: '中型' },
+  72: { label: '72×72', desc: '大型' },
+};
+
+interface FormValues {
+  colorGroupId: string;
+  prompt: string;
+}
 
 export function ImageProcessingPreview({
   open,
@@ -31,100 +77,144 @@ export function ImageProcessingPreview({
   onOpenSettings,
 }: ImageProcessingPreviewProps) {
   const { t } = useTranslation();
-  const { setPixelationCanvasSize, selectedColorGroupId, setSelectedColorGroupId, cacheAIImage, cacheCanvasData } = useUploadStore();
+  const {
+    setPixelationCanvasSize,
+    selectedColorGroupId,
+    setSelectedColorGroupId,
+    cacheAIImage,
+    cacheCanvasData,
+  } = useUploadStore();
   const { getImageProcessor } = useLLMProviderStore();
   const { generateImage, isGenerating } = useImageGeneration();
   const { colorGroups } = useEditorStore();
+  const [form] = Form.useForm<FormValues>();
 
-  const [prompt, setPrompt] = useState('');
   const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [selectedGridSize, setSelectedGridSize] = useState<CanvasSize | null>(null);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
-  const activeColorGroup = colorGroups.find((g) => g.id === selectedColorGroupId) || colorGroups[0];
-
+  const activeColorGroup =
+    colorGroups.find((g) => g.id === selectedColorGroupId) || colorGroups[0];
   const imageProcessor = getImageProcessor();
   const hasImageProcessor = !!imageProcessor;
 
-  // Reset state when modal closes
+  // Use ref to access current form values in callbacks
+  const formValuesRef = useRef<FormValues>({
+    colorGroupId: selectedColorGroupId,
+    prompt: '',
+  });
+
   useEffect(() => {
-    if (!open) {
-      setPrompt('');
+    if (open) {
+      form.setFieldsValue({
+        colorGroupId: selectedColorGroupId,
+        prompt: '',
+      });
+      formValuesRef.current = {
+        colorGroupId: selectedColorGroupId,
+        prompt: '',
+      };
+    } else {
       setProcessedImageUrl(null);
       setProcessingError(null);
       setSelectedGridSize(null);
       setIsConfirmed(false);
       setIsApplying(false);
+      form.resetFields();
     }
-  }, [open]);
+  }, [open, selectedColorGroupId, form]);
 
-  const performGeneration = useCallback(async (userPrompt: string, gridSize: CanvasSize, colorGroup: ColorGroup) => {
-    if (!imageProcessor || isGenerating) return;
+  const performGeneration = useCallback(
+    async (userPrompt: string, gridSize: CanvasSize, colorGroup: ColorGroup) => {
+      if (!imageProcessor || isGenerating) return;
 
-    setProcessingError(null);
+      setProcessingError(null);
 
-    try {
-      // 检测是否是字节跳动 API
-      const isVolces = isVolcesAPI(imageProcessor.baseUrl || '');
+      try {
+        const isVolces = isVolcesAPI(imageProcessor.baseUrl || '');
+        const finalPrompt = generateGridPrompt(userPrompt, gridSize, {
+          name: colorGroup.name,
+          brand: colorGroup.brand,
+          beadSize: colorGroup.beadSize,
+          colorCount: colorGroup.colors.length,
+        });
+        const size = calculateImageSize(imageWidth, imageHeight, isVolces);
+        const additionalParams = isVolces
+          ? {
+              sequential_image_generation: 'disabled',
+              stream: false,
+              watermark: false,
+            }
+          : { stream: false };
 
-      // 构建带网格参数的最终 prompt，包含色号组信息
-      const finalPrompt = generateGridPrompt(userPrompt, gridSize, {
-        name: colorGroup.name,
-        brand: colorGroup.brand,
-        beadSize: colorGroup.beadSize,
-        colorCount: colorGroup.colors.length,
-      });
+        const result = await generateImage(imageProcessor, {
+          prompt: finalPrompt,
+          imageUrl,
+          size,
+          responseFormat: 'url',
+          additionalParams,
+        });
 
-      // 根据原图比例自动计算尺寸
-      const size = calculateImageSize(imageWidth, imageHeight, isVolces);
-
-      // 字节跳动特有参数
-      const additionalParams = isVolces ? {
-        sequential_image_generation: 'disabled',
-        stream: false,
-        watermark: false,
-      } : {
-        stream: false,
-      };
-
-      const result = await generateImage(imageProcessor, {
-        prompt: finalPrompt,
-        imageUrl,
-        size,
-        responseFormat: 'url',
-        additionalParams,
-      });
-
-      if (result?.imageUrl) {
-        setProcessedImageUrl(result.imageUrl);
-        // 缓存AI生成的图片（不包含gridSize，这样可以用同一张图重新处理成不同尺寸）
-        const cacheKey = `${imageUrl}-${colorGroup.id}`;
-        cacheAIImage(cacheKey, result.imageUrl, gridSize);
+        if (result?.imageUrl) {
+          setProcessedImageUrl(result.imageUrl);
+          const cacheKey = `${imageUrl}-${colorGroup.id}`;
+          cacheAIImage(cacheKey, result.imageUrl, gridSize);
+        }
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : t('upload.processingFailed');
+        setProcessingError(errorMessage);
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : t('upload.processingFailed');
-      setProcessingError(errorMessage);
-    }
-  }, [generateImage, imageProcessor, imageUrl, imageWidth, imageHeight, t, isGenerating, cacheAIImage]);
+    },
+    [
+      generateImage,
+      imageProcessor,
+      imageUrl,
+      imageWidth,
+      imageHeight,
+      t,
+      isGenerating,
+      cacheAIImage,
+    ]
+  );
 
-  const handleGridSizeSelect = useCallback((size: CanvasSize) => {
-    setSelectedGridSize(size);
-    setPixelationCanvasSize(size);
-    // 选择尺寸后直接进入处理预览界面
-    setIsConfirmed(true);
-    // 自动开始生成
-    if (hasImageProcessor && imageProcessor) {
-      void performGeneration(prompt, size, activeColorGroup);
-    }
-  }, [setPixelationCanvasSize, hasImageProcessor, imageProcessor, prompt, performGeneration, activeColorGroup]);
+  const handleGridSizeSelect = useCallback(
+    (size: CanvasSize) => {
+      setSelectedGridSize(size);
+      setPixelationCanvasSize(size);
+      setIsConfirmed(true);
+      if (hasImageProcessor && imageProcessor) {
+        const { prompt } = formValuesRef.current;
+        void performGeneration(prompt, size, activeColorGroup);
+      }
+    },
+    [
+      setPixelationCanvasSize,
+      hasImageProcessor,
+      imageProcessor,
+      performGeneration,
+      activeColorGroup,
+    ]
+  );
 
   const handleGenerate = useCallback(() => {
     if (selectedGridSize) {
+      const { prompt } = formValuesRef.current;
       void performGeneration(prompt, selectedGridSize, activeColorGroup);
     }
-  }, [prompt, selectedGridSize, performGeneration, activeColorGroup]);
+  }, [selectedGridSize, performGeneration, activeColorGroup]);
+
+  const handleValuesChange = useCallback(
+    (changedValues: Partial<FormValues>, allValues: FormValues) => {
+      formValuesRef.current = allValues;
+      if (changedValues.colorGroupId) {
+        setSelectedColorGroupId(changedValues.colorGroupId);
+      }
+    },
+    [setSelectedColorGroupId]
+  );
 
   const handleConfirm = useCallback(async () => {
     if (!processedImageUrl || !selectedGridSize) return;
@@ -132,8 +222,6 @@ export function ImageProcessingPreview({
     setIsApplying(true);
 
     try {
-      // 使用代理获取图片，避免 CORS 问题
-      // 如果已经是代理 URL，直接使用；否则添加代理前缀
       const proxyUrl = processedImageUrl.startsWith('/api/')
         ? processedImageUrl
         : `/api/proxy-image?url=${encodeURIComponent(processedImageUrl)}`;
@@ -146,9 +234,8 @@ export function ImageProcessingPreview({
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
 
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
-        // 创建与原图相同尺寸的 canvas
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
@@ -161,36 +248,27 @@ export function ImageProcessingPreview({
           return;
         }
 
-        // 绘制原图
         ctx.drawImage(img, 0, 0);
-
-        // 获取完整图像数据
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
         const canvasData: CanvasData = [];
-
-        // 将原图划分为 gridSize x gridSize 的网格，每个网格取中心点像素
         const cellWidth = img.width / selectedGridSize;
         const cellHeight = img.height / selectedGridSize;
 
         for (let gridY = 0; gridY < selectedGridSize; gridY++) {
           const row = [];
           for (let gridX = 0; gridX < selectedGridSize; gridX++) {
-            // 计算该网格单元中心点在原图中的坐标
             const centerX = Math.floor(gridX * cellWidth + cellWidth / 2);
             const centerY = Math.floor(gridY * cellHeight + cellHeight / 2);
-
-            // 确保坐标在有效范围内
             const safeX = Math.min(centerX, img.width - 1);
             const safeY = Math.min(centerY, img.height - 1);
-
-            // 读取中心点像素
             const idx = (safeY * img.width + safeX) * 4;
             const r = imageData.data[idx];
             const g = imageData.data[idx + 1];
             const b = imageData.data[idx + 2];
             const a = imageData.data[idx + 3];
-
-            const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+            const hex = `#${[r, g, b]
+              .map((v) => v.toString(16).padStart(2, '0'))
+              .join('')}`.toUpperCase();
 
             row.push({
               color: a > 128 ? hex : null,
@@ -200,10 +278,8 @@ export function ImageProcessingPreview({
           canvasData.push(row);
         }
 
-        // Clean up blob URL
         URL.revokeObjectURL(blobUrl);
         setIsApplying(false);
-        // 缓存canvas数据供后处理使用
         cacheCanvasData(canvasData, selectedGridSize, imageUrl);
         onConfirm(canvasData, selectedGridSize);
       };
@@ -221,112 +297,122 @@ export function ImageProcessingPreview({
     }
   }, [processedImageUrl, selectedGridSize, onConfirm, t, cacheCanvasData, imageUrl]);
 
-  // 渲染网格尺寸选择界面
   const renderGridSelection = () => (
-    <div style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
-      <h3 style={{ marginBottom: 'var(--space-lg)', color: 'var(--color-text)' }}>
-        {t('upload.selectGridSize') || '请选择网格尺寸'}
-      </h3>
-      <p style={{ marginBottom: 'var(--space-lg)', color: 'var(--color-text-secondary)' }}>
-        {t('upload.gridSizeDescription') || '选择拼豆画布的网格尺寸，这将决定最终图案的精细程度'}
-      </p>
+    <ConfigProvider
+      theme={{
+        components: {
+          Segmented: {
+            itemSelectedBg: 'var(--color-primary)',
+            itemSelectedColor: '#fff',
+          },
+        },
+      }}
+    >
+      <Flex vertical align="center" gap="large" style={{ padding: '32px 0' }}>
+        <Flex vertical align="center" gap="small">
+          <Title level={5} style={{ margin: 0, color: 'var(--color-text)' }}>
+            {t('upload.selectGridSize') || '请选择网格尺寸'}
+          </Title>
+          <Text type="secondary" style={{ textAlign: 'center' }}>
+            {t('upload.gridSizeDescription') ||
+              '选择拼豆画布的网格尺寸，这将决定最终图案的精细程度'}
+          </Text>
+        </Flex>
 
-      {/* 色号组选择 */}
-      <div style={{
-        display: 'flex',
-        gap: 'var(--space-md)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 'var(--space-lg)',
-        flexWrap: 'wrap',
-      }}>
-        <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-          {t('color.colorGroup') || '色号组'}:
-        </span>
-        <Select
-          value={selectedColorGroupId}
-          onChange={(value) => {
-            setSelectedColorGroupId(value);
-          }}
-          style={{ minWidth: 200 }}
-          options={colorGroups.map((group) => ({
-            value: group.id,
-            label: `${group.name} (${group.brand} ${group.beadSize}) - ${group.colors.length} ${t('pixelation.colors') || '色'}`
-          }))}
-        />
-      </div>
-
-      {/* 自定义 Prompt 输入 */}
-      <div style={{ marginBottom: 'var(--space-lg)', maxWidth: 500, margin: '0 auto var(--space-lg)' }}>
-        <Input.TextArea
-          placeholder={t('upload.promptPlaceholder') || '输入自定义提示词（可选），描述你想要的图案效果...'}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={2}
-          disabled={isGenerating}
-        />
-      </div>
-
-      <div style={{
-        marginBottom: 'var(--space-xl)',
-        padding: 'var(--space-md)',
-        background: 'var(--color-bg-secondary)',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border)',
-      }}>
-        <div style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--color-text-secondary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          marginBottom: 'var(--space-sm)',
-        }}>
-          {t('upload.gridSizeLabel') || '画布尺寸'}
-        </div>
-        <div style={{
-          display: 'flex',
-          gap: 'var(--space-md)',
-          justifyContent: 'center',
-          flexWrap: 'wrap',
-        }}>
-          {GRID_SIZES.map((size) => (
-            <Button
-              key={size}
-              type={selectedGridSize === size ? 'primary' : 'default'}
-              onClick={() => handleGridSizeSelect(size as CanvasSize)}
-              size="large"
-              style={{
-                minWidth: 100,
-                height: 60,
-                fontSize: 16,
-              }}
+        <Card
+          size="small"
+          style={{ width: '100%', maxWidth: 520 }}
+          styles={{ body: { padding: 16 } }}
+        >
+          <Form
+            form={form}
+            layout="vertical"
+            onValuesChange={handleValuesChange}
+            initialValues={{
+              colorGroupId: selectedColorGroupId,
+              prompt: '',
+            }}
+          >
+            <Form.Item
+              name="colorGroupId"
+              label={
+                <Flex align="center" gap="small">
+                  <AppstoreOutlined />
+                  <span>{t('color.colorGroup') || '色号组'}</span>
+                </Flex>
+              }
             >
-              <div>
-                <div style={{ fontWeight: 'bold' }}>{size}×{size}</div>
-                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                   {size === 29 && (t('upload.gridSizeSmall') || '迷你')}
-                   {size === 52 && (t('upload.gridSizeMedium') || '中型')}
-                   {size === 72 && (t('upload.gridSizeLarge') || '大型')}
-                 </div>
-              </div>
-            </Button>
-          ))}
-        </div>
-      </div>
-    </div>
+              <Select
+                options={colorGroups.map((group) => ({
+                  value: group.id,
+                  label: `${group.name} (${group.brand} ${group.beadSize}) - ${group.colors.length}${t('pixelation.colors') || '色'}`,
+                }))}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="prompt"
+              label={
+                <Flex align="center" gap="small">
+                  <EditOutlined />
+                  <span>{t('upload.customPrompt') || '自定义提示词'}</span>
+                </Flex>
+              }
+            >
+              <Input.TextArea
+                placeholder={
+                  t('upload.promptPlaceholder') ||
+                  '输入自定义提示词（可选），描述你想要的图案效果...'
+                }
+                rows={2}
+                disabled={isGenerating}
+              />
+            </Form.Item>
+          </Form>
+        </Card>
+
+        <Card
+          title={
+            <Flex align="center" gap="small">
+              <CheckCircleOutlined style={{ color: 'var(--color-primary)' }} />
+              <span>{t('upload.gridSizeLabel') || '画布尺寸'}</span>
+            </Flex>
+          }
+          size="small"
+          style={{ width: '100%', maxWidth: 520 }}
+        >
+          <Segmented
+            block
+            value={selectedGridSize || undefined}
+            onChange={(value) => handleGridSizeSelect(value as CanvasSize)}
+            options={GRID_SIZES.map((size) => ({
+              value: size,
+              label: (
+                <Flex vertical align="center" gap={2}>
+                  <Text strong style={{ fontSize: 16 }}>
+                    {size}×{size}
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {sizeLabels[size].desc}
+                  </Text>
+                </Flex>
+              ),
+            }))}
+          />
+        </Card>
+      </Flex>
+    </ConfigProvider>
   );
 
-  // 渲染图片处理和预览界面
   const renderProcessingPreview = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+    <Flex vertical gap="middle" style={{ padding: '8px 0' }}>
       {!hasImageProcessor && (
         <Alert
           type="error"
           message={t('upload.noImageProcessor')}
           description={
-            <div>
-              <p>{t('upload.configureImageProcessor')}</p>
+            <Flex vertical gap="small">
+              <Text>{t('upload.configureImageProcessor')}</Text>
               <Button
                 type="primary"
                 icon={<SettingOutlined />}
@@ -335,7 +421,7 @@ export function ImageProcessingPreview({
               >
                 {t('upload.openSettings')}
               </Button>
-            </div>
+            </Flex>
           }
           showIcon
         />
@@ -360,18 +446,16 @@ export function ImageProcessingPreview({
         />
       )}
 
-      <div style={{
-        padding: 'var(--space-sm) var(--space-md)',
-        background: 'var(--color-bg-secondary)',
-        borderRadius: 'var(--radius-md)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-          {t('upload.selectedGridSize') || '已选网格尺寸'}:
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+      <Card
+        size="small"
+        styles={{ body: { padding: '12px 16px' } }}
+        style={{ background: 'var(--color-bg-secondary)' }}
+      >
+        <Row justify="space-between" align="middle">
+          <Flex align="center" gap="small">
+            <Badge status="processing" color="var(--color-primary)" />
+            <Text strong>{t('upload.selectedGridSize') || '已选网格尺寸'}</Text>
+          </Flex>
           <Select
             value={selectedGridSize!}
             onChange={(value) => {
@@ -379,177 +463,204 @@ export function ImageProcessingPreview({
               setPixelationCanvasSize(value);
             }}
             size="small"
-            style={{ width: 120 }}
+            style={{ width: 110 }}
             options={GRID_SIZES.map((size) => ({
               value: size,
               label: `${size}×${size}`,
             }))}
           />
-        </div>
-      </div>
+        </Row>
+      </Card>
 
       {hasImageProcessor && (
-        <div>
-          <div style={{ marginBottom: 'var(--space-md)' }}>
-            <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
-              <span style={{ fontWeight: 500, color: 'var(--color-text)', fontSize: 13 }}>
-                {t('color.colorGroup') || '色号组'}:
-              </span>
+        <Card size="small">
+          <Form
+            layout="vertical"
+            initialValues={{
+              colorGroupId: selectedColorGroupId,
+              prompt: formValuesRef.current.prompt,
+            }}
+          >
+            <Form.Item
+              label={
+                <Flex align="center" gap="small">
+                  <AppstoreOutlined />
+                  <span>{t('color.colorGroup') || '色号组'}</span>
+                </Flex>
+              }
+            >
               <Select
                 value={selectedColorGroupId}
-                onChange={(value) => {
-                  setSelectedColorGroupId(value);
-                }}
-                style={{ minWidth: 200 }}
+                onChange={setSelectedColorGroupId}
                 options={colorGroups.map((group) => ({
                   value: group.id,
-                  label: `${group.name} (${group.brand} ${group.beadSize}) - ${group.colors.length} ${t('pixelation.colors') || '色'}`
+                  label: `${group.name} (${group.brand} ${group.beadSize}) - ${group.colors.length}${t('pixelation.colors') || '色'}`,
                 }))}
               />
-            </div>
-            <Input.TextArea
-              placeholder={t('upload.promptPlaceholder')}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={2}
-              disabled={isGenerating}
-            />
-          </div>
-          <div style={{ marginTop: 'var(--space-sm)', display: 'flex', gap: 'var(--space-sm)' }}>
-            <Button
-              type="primary"
-              onClick={handleGenerate}
-              loading={isGenerating}
-              disabled={!hasImageProcessor}
+            </Form.Item>
+
+            <Form.Item
+              label={
+                <Flex align="center" gap="small">
+                  <EditOutlined />
+                  <span>{t('upload.customPrompt') || '自定义提示词'}</span>
+                </Flex>
+              }
             >
-              {processedImageUrl ? t('upload.regenerate') : t('upload.generate')}
-            </Button>
-            {processedImageUrl && (
-              <Button onClick={() => setProcessedImageUrl(null)}>
-                {t('upload.clear')}
-              </Button>
-            )}
-          </div>
-        </div>
+              <Input.TextArea
+                value={formValuesRef.current.prompt}
+                onChange={(e) => {
+                  const newPrompt = e.target.value;
+                  formValuesRef.current.prompt = newPrompt;
+                  form.setFieldsValue({ prompt: newPrompt });
+                }}
+                placeholder={t('upload.promptPlaceholder')}
+                rows={2}
+                disabled={isGenerating}
+              />
+            </Form.Item>
+
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Flex gap="small">
+                <Button
+                  type="primary"
+                  icon={<RobotOutlined />}
+                  onClick={handleGenerate}
+                  loading={isGenerating}
+                  disabled={!hasImageProcessor}
+                >
+                  {processedImageUrl ? t('upload.regenerate') : t('upload.generate')}
+                </Button>
+                {processedImageUrl && (
+                  <Button icon={<EditOutlined />} onClick={() => setProcessedImageUrl(null)}>
+                    {t('upload.clear')}
+                  </Button>
+                )}
+              </Flex>
+            </Form.Item>
+          </Form>
+        </Card>
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--space-lg)' }}>
-        <div style={{ flex: 1 }}>
-          <label
-            style={{
-              fontWeight: 500,
-              color: 'var(--color-text)',
-              fontSize: 13,
-              display: 'block',
-              marginBottom: 'var(--space-sm)',
-            }}
+      <Row gutter={16}>
+        <Col span={12} xs={24} sm={12}>
+          <Card
+            title={
+              <Flex align="center" gap="small">
+                <PictureOutlined style={{ color: 'var(--color-primary)' }} />
+                <span>{t('pixelation.originalImage')}</span>
+              </Flex>
+            }
+            size="small"
+            styles={{ body: { padding: 0 } }}
           >
-            {t('pixelation.originalImage')}
-          </label>
-          <div
-            style={{
-              width: 360,
-              height: 360,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              overflow: 'hidden',
-              background: 'var(--color-bg-secondary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <img
-              src={imageUrl}
-              alt="Original"
+            <Flex
+              justify="center"
+              align="center"
               style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
+                height: 320,
+                background: 'var(--color-bg-secondary)',
+                overflow: 'hidden',
               }}
-            />
-          </div>
-        </div>
-
-        <div style={{ flex: 1 }}>
-          <label
-            style={{
-              fontWeight: 500,
-              color: 'var(--color-text)',
-              fontSize: 13,
-              display: 'block',
-              marginBottom: 'var(--space-sm)',
-            }}
-          >
-            {t('upload.processedPreview')} ({selectedGridSize}×{selectedGridSize})
-          </label>
-          <div
-            style={{
-              width: 360,
-              height: 360,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              overflow: 'hidden',
-              background: 'var(--color-bg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-            }}
-          >
-            {isGenerating ? (
-              <div style={{ textAlign: 'center' }}>
-                <Spin size="large" />
-                <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-text-secondary)' }}>
-                  {t('upload.processing')}
-                </p>
-              </div>
-            ) : processedImageUrl ? (
-              <img
-                src={processedImageUrl}
-                alt="Processed"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  objectFit: 'contain',
-                }}
+            >
+              <Image
+                src={imageUrl}
+                alt={t('pixelation.originalImage')}
+                style={{ maxHeight: 320, objectFit: 'contain' }}
+                preview={false}
               />
-            ) : (
-              <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                <p>{hasImageProcessor ? t('upload.clickGenerate') : t('upload.configureFirst')}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+            </Flex>
+          </Card>
+        </Col>
+
+        <Col span={12} xs={24} sm={12}>
+          <Card
+            title={
+              <Flex align="center" gap="small">
+                <AimOutlined style={{ color: 'var(--color-primary)' }} />
+                <span>
+                  {t('upload.processedPreview')} ({selectedGridSize}×{selectedGridSize})
+                </span>
+              </Flex>
+            }
+            size="small"
+            styles={{ body: { padding: 0 } }}
+          >
+            <Flex
+              justify="center"
+              align="center"
+              style={{
+                height: 320,
+                background: 'var(--color-bg)',
+                position: 'relative',
+              }}
+            >
+              {isGenerating ? (
+                <Flex vertical align="center" gap="middle">
+                  <Spin size="large" />
+                  <Text type="secondary">{t('upload.processing')}</Text>
+                </Flex>
+              ) : processedImageUrl ? (
+                <Image
+                  src={processedImageUrl}
+                  alt={t('upload.processedPreview')}
+                  style={{ maxHeight: 320, objectFit: 'contain' }}
+                  preview={{ mask: t('common.preview') || '预览' }}
+                />
+              ) : (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    hasImageProcessor
+                      ? t('upload.clickGenerate')
+                      : t('upload.configureFirst')
+                  }
+                />
+              )}
+            </Flex>
+          </Card>
+        </Col>
+      </Row>
+    </Flex>
   );
 
   return (
     <Modal
-      title={t('upload.imageProcessing')}
+      title={
+        <Flex align="center" gap="small">
+          <RobotOutlined style={{ color: 'var(--color-primary)' }} />
+          <span>{t('upload.imageProcessing')}</span>
+        </Flex>
+      }
       open={open}
       onCancel={onCancel}
-      width={800}
-      footer={isConfirmed ? [
-        <Button key="cancel" onClick={onCancel} disabled={isApplying}>
-          {t('common.cancel')}
-        </Button>,
-        <Button
-          key="confirm"
-          type="primary"
-          onClick={handleConfirm}
-          disabled={!processedImageUrl || isGenerating || isApplying}
-          loading={isApplying}
-        >
-          {t('upload.applyToCanvas')}
-        </Button>,
-      ] : [
-        <Button key="cancel" onClick={onCancel} disabled={isApplying}>
-          {t('common.cancel')}
-        </Button>,
-      ]}
+      width={840}
+      styles={{ body: { padding: '0 24px 24px' } }}
+      footer={
+        isConfirmed
+          ? [
+              <Button key="cancel" onClick={onCancel} disabled={isApplying}>
+                {t('common.cancel')}
+              </Button>,
+              <Button
+                key="confirm"
+                type="primary"
+                onClick={handleConfirm}
+                disabled={!processedImageUrl || isGenerating || isApplying}
+                loading={isApplying}
+                icon={<CheckCircleOutlined />}
+              >
+                {t('upload.applyToCanvas')}
+              </Button>,
+            ]
+          : [
+              <Button key="cancel" onClick={onCancel} disabled={isApplying}>
+                {t('common.cancel')}
+              </Button>,
+            ]
+      }
     >
+      <Divider style={{ margin: '0 0 24px 0' }} />
       {!isConfirmed ? renderGridSelection() : renderProcessingPreview()}
     </Modal>
   );
