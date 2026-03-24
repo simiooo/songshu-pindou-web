@@ -6,6 +6,8 @@ import https from 'https'
 import http from 'http'
 import { URL } from 'url'
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 // 图片代理插件（开发环境）
 function proxyImagePlugin(): Plugin {
   return {
@@ -64,6 +66,7 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     proxyImagePlugin(),
+    cloudflare()
   ],
   resolve: {
     alias: {
